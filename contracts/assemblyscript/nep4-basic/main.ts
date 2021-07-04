@@ -1,6 +1,6 @@
 import { PersistentMap, storage, context, ContractPromiseBatch, base64, base58, util } from 'near-sdk-as'
 import { Storage, u128 } from 'near-sdk-core'
-import { signEdVerify } from './crypto'
+import { sha256HashInit, sha256HashUpdate, sha256HashFinal, hashInit} from '../../../node_modules/wasm-crypto/assembly/crypto';
 
 /**************************/
 /* DATA TYPES AND STORAGE */
@@ -16,7 +16,7 @@ export const MAX_SUPPLY = u64(100)
 export const MAX_MIXES_PER_TOKEN = 20;
 export const MAX_MIX_BYTES = 200;
 export const MAX_MIX_BYTES_BASE64 = 2000;
-export const LISTEN_TIMEOUT: u64 = 1000000000;
+export const LISTEN_TIMEOUT: u64 = 5 * 60 * 1000000000;
 
 // The strings used to index variables in storage can be any string
 // Let's set them to single characters to save storage space
@@ -55,7 +55,9 @@ export const ERROR_OWNER_ID_DOES_NOT_MATCH_EXPECTATION = 'Owner id does not matc
 export const ERROR_TOKEN_NOT_OWNED_BY_CALLER = 'Token is not owned by the caller. Please use transfer_from for this scenario'
 export const ERROR_TOKEN_NOT_FOR_SALE = 'Token is not for sale'
 export const ERROR_LISTENING_NOT_AVAILABLE = 'Listening is not available'
+export const ERROR_LISTENING_NOT_AUTHORIZED = 'Listening is not authorized'
 export const ERROR_LISTENING_REQUIRES_PAYMENT = 'Listening requires payment, call request_listening first'
+export const ERROR_LISTENING_EXPIRED = 'Listening request expired, please create a new'
 export const ERROR_MIX_TOO_LARGE = 'Mix too large, max size is '+MAX_MIX_BYTES.toString()
 export const ERROR_TOKEN_DOES_NOT_SUPPORT_MIXING = 'Token does not support mixing'
 export const MUST_BE_CALLED_BY_BENEFICIARY = 'Must be called by beneficiary'
@@ -270,7 +272,7 @@ export function view_remix_content(token_id: TokenId): string {
 }
 
 @payable
-export function request_listening(token_id: TokenId): ContractPromiseBatch {
+export function request_listening(token_id: TokenId, listenRequestPasswordHash: string): ContractPromiseBatch {
   const predecessor = context.predecessor
   
   const owner = tokenToOwner.getSome(token_id)
@@ -281,7 +283,7 @@ export function request_listening(token_id: TokenId): ContractPromiseBatch {
   }  
   const listeningKey = 'l:' + predecessor + ':' + token_id.toString()
 
-  Storage.set<ListenRequest>(listeningKey, context.senderPublicKey + ',' + context.blockTimestamp.toString())
+  Storage.set<ListenRequest>(listeningKey, listenRequestPasswordHash + ',' + context.blockTimestamp.toString())
   if(owner != predecessor) {
     // 99 % to owner
     const amountToOwner = changetype<u128>(context.attachedDeposit * u128.fromI32(99) / u128.fromI32(100))
@@ -295,24 +297,28 @@ export function view_token_content_base64(token_id: TokenId): String {
   return base64.encode(Storage.getBytes('t' + token_id.toString())!)
 }
 
-export function get_token_content_base64(signedmessage: string): Uint8Array {
-  const signedmessageparts = signedmessage.split('.')
-  const messagebytes = base64.decode(signedmessageparts[0])
-  const messageparts = String.UTF8.decode(messagebytes.buffer).split(':')
-  const predecessor = messageparts[0]
-  const token_id: TokenId = U64.parseInt(messageparts[1])
-  const owner = tokenToOwner.getSome(token_id)
+export function get_token_content_base64(token_id: TokenId, caller: string, listenRequestPassword: string): Uint8Array {
+  const listeningKey = 'l:' + caller + ':' + token_id.toString()
 
-  if (owner != predecessor) {
-    const listeningKey = 'l:' + predecessor + ':' + token_id.toString()
-    assert(storage.contains(listeningKey), ERROR_LISTENING_REQUIRES_PAYMENT)
-    const listenRequestParts = Storage.getPrimitive<ListenRequest>(listeningKey, '').split(',')
-    const listenRequestTimeStamp = U64.parseInt(listenRequestParts[1])
-    const listenRequestPk = base58.decode('1'+listenRequestParts[0]).slice(1);
+  assert(Storage.contains(listeningKey), ERROR_LISTENING_REQUIRES_PAYMENT)
+  const listenRequestParts = Storage.getPrimitive<ListenRequest>(listeningKey, '').split(',')
+  const listenRequestPasswordHash = base64.decode(listenRequestParts[0])
+  const listenRequestTimeStamp = U64.parseInt(listenRequestParts[1])
 
-    assert(signEdVerify(base64.decode(signedmessageparts[1]), messagebytes, listenRequestPk), 'blabla')
-    assert(context.blockTimestamp - listenRequestTimeStamp < LISTEN_TIMEOUT, ERROR_LISTENING_REQUIRES_PAYMENT)
-  }  
+  const hashState = sha256HashInit();
+  sha256HashUpdate(hashState, Uint8Array.wrap(String.UTF8.encode(listenRequestPassword)))
+  const hash = sha256HashFinal(hashState)
+  let hashEquals = true;
+  for (let n=0;n<hash.length;n++) {
+    if (hash[n] != listenRequestPasswordHash[n]) {
+      hashEquals = false
+      break
+    }
+  }
+
+  assert(hashEquals, ERROR_LISTENING_NOT_AUTHORIZED)
+  assert((context.blockTimestamp - listenRequestTimeStamp) < LISTEN_TIMEOUT, ERROR_LISTENING_EXPIRED)
+
   const contentbytes = Storage.getBytes('t' + token_id.toString())!
   return contentbytes
 }

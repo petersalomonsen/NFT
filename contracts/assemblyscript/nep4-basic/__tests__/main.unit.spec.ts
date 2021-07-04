@@ -1,6 +1,6 @@
 import { VMContext, base64, base58, util } from 'near-sdk-as'
 import { Context, u128 } from 'near-sdk-core';
-import { signEdPublicKey } from '../crypto';
+import { sha256HashInit, sha256HashUpdate, sha256HashFinal} from '../../../../node_modules/wasm-crypto/assembly/crypto';
 
 // explicitly import functions required by spec
 import {
@@ -16,9 +16,6 @@ import {
 // wrap all other functions in `nonSpec` variable, to make it clear when
 // tests are using functionality that isn't defined by the spec
 import * as nonSpec from '../main'
-import { signEd } from '../crypto';
-import { signEdVerify } from '../crypto';
-
 
 const alice = 'alice'
 const bob = 'bob'
@@ -30,12 +27,6 @@ const mintprice = u128.fromString('800000000000000000000');
 
 let currentTokenId: u64;
 let currentMix: string;
-
-const keybytes: u8[] = [211, 153, 89, 234, 218, 124, 178, 241, 157, 184, 70, 63, 98, 87, 0, 119, 76, 62, 71, 142, 147, 44, 98, 95, 158, 230, 249, 0, 224, 37, 192, 3, 110, 12, 217, 42, 243, 2, 10, 27, 43, 124, 123, 118, 18, 18, 16, 32, 39, 115, 156, 184, 180, 50, 132, 185, 254, 230, 106, 7, 164, 84, 193, 120];
-const KEYPAIR = new Uint8Array(64);
-for (var n = 0; n < keybytes.length; n++) {
-  KEYPAIR[n] = keybytes[n];
-}
 
 describe('grant_access', () => {
   it('grants access to the given account_id for all the tokens that account has', () => {
@@ -264,15 +255,17 @@ describe('nonSpec interface', () => {
       nonSpec.mint_to_base64(alice, content)
     }).toThrow(nonSpec.ERROR_MAXIMUM_TOKEN_LIMIT_REACHED)
   })
-  it('should get content', () => {
+  it('owner should get free listening', () => {
     VMContext.setAttached_deposit(mintprice);
     const tokenId = nonSpec.mint_to_base64(alice, content)
     VMContext.setPredecessor_account_id(alice)
-    const messagebytes = Uint8Array.wrap(String.UTF8.encode('alice:' + tokenId.toString()))
 
-    const signaturebytes = signEd(messagebytes, KEYPAIR)
-    const signedmessage = base64.encode(messagebytes) + '.' + base64.encode(signaturebytes)
-    expect(base64.encode(nonSpec.get_token_content_base64(signedmessage))).toStrictEqual(content);
+    const listenRequestPassword = 'abcd1234';
+    const hashstate = sha256HashInit();
+    sha256HashUpdate(hashstate, Uint8Array.wrap(String.UTF8.encode(listenRequestPassword)))
+    nonSpec.request_listening(tokenId, base64.encode(sha256HashFinal(hashstate)))
+
+    expect(base64.encode(nonSpec.get_token_content_base64(tokenId, alice, listenRequestPassword))).toStrictEqual(content);
   })
   it('should get legacy content', () => {
     const mintprice = u128.fromString('8000000000000000000000000');
@@ -322,7 +315,7 @@ describe('nonSpec interface', () => {
       VMContext.setPredecessor_account_id(alice)
       const tokenId = nonSpec.mint_to_base64(alice, content)
       VMContext.setPredecessor_account_id(bob)
-      expect(base64.encode(nonSpec.get_token_content_base64('bob:' + tokenId.toString() + '.aa'))).toStrictEqual(content)
+      expect(base64.encode(nonSpec.get_token_content_base64(tokenId, bob, 'abcd1234'))).toStrictEqual(content)
     }).toThrow()
   })
   it('should not be allowed to get content if not paying for listening', () => {
@@ -333,7 +326,7 @@ describe('nonSpec interface', () => {
       const listenprice = u128.fromString('1000000000000000000000')
       nonSpec.set_listening_price(tokenId, listenprice)
       VMContext.setPredecessor_account_id(bob)
-      expect(base64.encode(nonSpec.get_token_content_base64('a:' + tokenId.toString() + '.aa'))).toStrictEqual(content)
+      expect(base64.encode(nonSpec.get_token_content_base64(tokenId, bob, 'abd124'))).toStrictEqual(content)
     }).toThrow()
   })
   it('should be allowed to get content if listening price is set', () => {
@@ -345,17 +338,14 @@ describe('nonSpec interface', () => {
     VMContext.setPredecessor_account_id(bob)
     VMContext.setAttached_deposit(listenprice)
 
-    const pkstring = base58.encode(signEdPublicKey(KEYPAIR));
+    const listenRequestPassword = 'abcd1234';
+    const hashstate = sha256HashInit();
+    sha256HashUpdate(hashstate, Uint8Array.wrap(String.UTF8.encode(listenRequestPassword)))
+    nonSpec.request_listening(tokenId, base64.encode(sha256HashFinal(hashstate)))
 
-    VMContext.setSigner_account_pk(pkstring);
-    nonSpec.request_listening(tokenId)
-
-    const messagebytes = Uint8Array.wrap(String.UTF8.encode('bob:' + tokenId.toString()));
-    const signaturebytes = signEd(messagebytes, KEYPAIR);
-    const signedmessage = base64.encode(messagebytes) + '.' + base64.encode(signaturebytes);
-    expect(base64.encode(nonSpec.get_token_content_base64(signedmessage))).toStrictEqual(content)
+    expect(base64.encode(nonSpec.get_token_content_base64(tokenId, bob, listenRequestPassword))).toStrictEqual(content)
   })
-  it('listeners should not be allowed to get content after 24 hours', () => {
+  it('listening request should only last 5 minutes', () => {
     VMContext.setAttached_deposit(mintprice);
     VMContext.setPredecessor_account_id(alice)
     currentTokenId = nonSpec.mint_to_base64(alice, content)
@@ -363,23 +353,20 @@ describe('nonSpec interface', () => {
     nonSpec.set_listening_price(currentTokenId, listenprice);
     VMContext.setPredecessor_account_id(bob)
     VMContext.setAttached_deposit(listenprice)
-    const pkstring = base58.encode(signEdPublicKey(KEYPAIR));
 
-    VMContext.setSigner_account_pk(pkstring);
-    
-    nonSpec.request_listening(currentTokenId)
+    const listenRequestPassword = 'abcd1234';
+    const hashstate = sha256HashInit();
+    sha256HashUpdate(hashstate, Uint8Array.wrap(String.UTF8.encode(listenRequestPassword)))
+    nonSpec.request_listening(currentTokenId, base64.encode(sha256HashFinal(hashstate)))
 
-    const messagebytes = Uint8Array.wrap(String.UTF8.encode('bob:' + currentTokenId.toString()));
-    const signaturebytes = signEd(messagebytes, KEYPAIR);
-    const signedmessage = base64.encode(messagebytes) + '.' + base64.encode(signaturebytes);
-    expect(base64.encode(nonSpec.get_token_content_base64(signedmessage))).toStrictEqual(content)
+    expect(base64.encode(nonSpec.get_token_content_base64(currentTokenId, bob, listenRequestPassword))).toStrictEqual(content)
+
+    VMContext.setBlock_timestamp(Context.blockTimestamp + 1)
+    expect(base64.encode(nonSpec.get_token_content_base64(currentTokenId, bob, listenRequestPassword))).toStrictEqual(content)
 
     expect(() => {
-      VMContext.setBlock_timestamp(Context.blockTimestamp + LISTEN_TIMEOUT);
-      const messagebytes = Uint8Array.wrap(String.UTF8.encode('bob:' + currentTokenId.toString()));
-      const signaturebytes = signEd(messagebytes, KEYPAIR);
-      const signedmessage = base64.encode(messagebytes) + '.' + base64.encode(signaturebytes);
-      nonSpec.get_token_content_base64(signedmessage)      
+      VMContext.setBlock_timestamp(Context.blockTimestamp + LISTEN_TIMEOUT)
+      nonSpec.get_token_content_base64(currentTokenId, bob, 'abcd1234')
     }).toThrow()
   })
   it('token owners should receive listen fee', () => {
@@ -394,7 +381,10 @@ describe('nonSpec interface', () => {
 
     VMContext.setPredecessor_account_id(bob)
     VMContext.setAttached_deposit(listenprice)
-    nonSpec.request_listening(currentTokenId)
+    const listenRequestPassword = 'abcd1234';
+    const hashstate = sha256HashInit();
+    sha256HashUpdate(hashstate, Uint8Array.wrap(String.UTF8.encode(listenRequestPassword)))
+    nonSpec.request_listening(currentTokenId, base64.encode(sha256HashFinal(hashstate)))
 
     expect(Context.accountBalance).toBe(u128.fromString('10000000000000000000'))
     VMContext.setPredecessor_account_id(alice)
@@ -412,14 +402,12 @@ describe('nonSpec interface', () => {
     const aliceToken = nonSpec.mint_to_base64(alice, largecontentb64)
 
     VMContext.setPredecessor_account_id(alice)
-    const pkstring = base58.encode(signEdPublicKey(KEYPAIR));
-    VMContext.setSigner_account_pk(pkstring);    
-    nonSpec.request_listening(aliceToken)
+    const listenRequestPassword = 'abcd1234';
+    const hashstate = sha256HashInit();
+    sha256HashUpdate(hashstate, Uint8Array.wrap(String.UTF8.encode(listenRequestPassword)))
+    nonSpec.request_listening(aliceToken, base64.encode(sha256HashFinal(hashstate)))
 
-    const messagebytes = Uint8Array.wrap(String.UTF8.encode('alice:' + aliceToken.toString()));
-    const signaturebytes = signEd(messagebytes, KEYPAIR);
-    const signedmessage = base64.encode(messagebytes) + '.' + base64.encode(signaturebytes);
-    expect(nonSpec.get_token_content_base64(signedmessage)).toStrictEqual(largecontent)
+    expect(nonSpec.get_token_content_base64(aliceToken, 'alice',listenRequestPassword)).toStrictEqual(largecontent)
   })
   it('should be possible to view token for free', () => {
     VMContext.setAttached_deposit(mintprice);
