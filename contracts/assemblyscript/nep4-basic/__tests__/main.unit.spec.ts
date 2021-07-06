@@ -1,6 +1,6 @@
 import { VMContext, base64, base58, util } from 'near-sdk-as'
 import { Context, u128 } from 'near-sdk-core';
-import { sha256HashInit, sha256HashUpdate, sha256HashFinal} from '../../../../node_modules/wasm-crypto/assembly/crypto';
+import { sha256HashInit, sha256HashUpdate, sha256HashFinal } from '../../../../node_modules/wasm-crypto/assembly/crypto';
 
 // explicitly import functions required by spec
 import {
@@ -10,7 +10,7 @@ import {
   transfer_from,
   check_access,
   get_token_owner,
-  LISTEN_TIMEOUT,
+  LISTEN_REQUEST_TIMEOUT,
 } from '../main'
 
 // wrap all other functions in `nonSpec` variable, to make it clear when
@@ -309,7 +309,7 @@ describe('nonSpec interface', () => {
     VMContext.setPredecessor_account_id(carol)
     expect(get_token_owner(tokenId)).toStrictEqual(bob)
   });
-  it('should not be allowed to get content if listening price is not set', () => {
+  it('should not be allowed to get content if no listening credit', () => {
     expect(() => {
       VMContext.setAttached_deposit(mintprice);
       VMContext.setPredecessor_account_id(alice)
@@ -323,23 +323,20 @@ describe('nonSpec interface', () => {
       VMContext.setAttached_deposit(mintprice);
       VMContext.setPredecessor_account_id(alice)
       const tokenId = nonSpec.mint_to_base64(alice, content)
-      const listenprice = u128.fromString('1000000000000000000000')
-      nonSpec.set_listening_price(tokenId, listenprice)
       VMContext.setPredecessor_account_id(bob)
       expect(base64.encode(nonSpec.get_token_content_base64(tokenId, bob, 'abd124'))).toStrictEqual(content)
     }).toThrow()
   })
-  it('should be allowed to get content if listening price is set', () => {
+  it('should be allowed to get content if bought listening credit', () => {
     VMContext.setAttached_deposit(mintprice);
     VMContext.setPredecessor_account_id(alice)
     const tokenId = nonSpec.mint_to_base64(alice, content)
-    const listenprice = u128.fromString('1000000000000000000000')
-    nonSpec.set_listening_price(tokenId, listenprice);
     VMContext.setPredecessor_account_id(bob)
-    VMContext.setAttached_deposit(listenprice)
 
-    const listenRequestPassword = 'abcd1234';
-    const hashstate = sha256HashInit();
+    VMContext.setAttached_deposit(nonSpec.LISTEN_PRICE)
+    nonSpec.buy_listening_credit()
+    const listenRequestPassword = 'abcd1234'
+    const hashstate = sha256HashInit()
     sha256HashUpdate(hashstate, Uint8Array.wrap(String.UTF8.encode(listenRequestPassword)))
     nonSpec.request_listening(tokenId, base64.encode(sha256HashFinal(hashstate)))
 
@@ -349,10 +346,9 @@ describe('nonSpec interface', () => {
     VMContext.setAttached_deposit(mintprice);
     VMContext.setPredecessor_account_id(alice)
     currentTokenId = nonSpec.mint_to_base64(alice, content)
-    const listenprice = u128.fromString('1000000000000000000000')
-    nonSpec.set_listening_price(currentTokenId, listenprice);
     VMContext.setPredecessor_account_id(bob)
-    VMContext.setAttached_deposit(listenprice)
+    VMContext.setAttached_deposit(nonSpec.LISTEN_PRICE)
+    nonSpec.buy_listening_credit()
 
     const listenRequestPassword = 'abcd1234';
     const hashstate = sha256HashInit();
@@ -365,30 +361,9 @@ describe('nonSpec interface', () => {
     expect(base64.encode(nonSpec.get_token_content_base64(currentTokenId, bob, listenRequestPassword))).toStrictEqual(content)
 
     expect(() => {
-      VMContext.setBlock_timestamp(Context.blockTimestamp + LISTEN_TIMEOUT)
+      VMContext.setBlock_timestamp(Context.blockTimestamp + LISTEN_REQUEST_TIMEOUT)
       nonSpec.get_token_content_base64(currentTokenId, bob, 'abcd1234')
     }).toThrow()
-  })
-  it('token owners should receive listen fee', () => {
-    VMContext.setAttached_deposit(mintprice)
-    VMContext.setPredecessor_account_id(alice)
-    currentTokenId = nonSpec.mint_to_base64(alice, content)
-
-    const listenprice = u128.fromString('1000000000000000000000')
-    nonSpec.set_listening_price(currentTokenId, listenprice);
-
-    VMContext.setAccount_balance(u128.fromString('0'))
-
-    VMContext.setPredecessor_account_id(bob)
-    VMContext.setAttached_deposit(listenprice)
-    const listenRequestPassword = 'abcd1234';
-    const hashstate = sha256HashInit();
-    sha256HashUpdate(hashstate, Uint8Array.wrap(String.UTF8.encode(listenRequestPassword)))
-    nonSpec.request_listening(currentTokenId, base64.encode(sha256HashFinal(hashstate)))
-
-    expect(Context.accountBalance).toBe(u128.fromString('10000000000000000000'))
-    VMContext.setPredecessor_account_id(alice)
-    expect(Context.accountBalance).toBe(u128.fromString('1000000000000000000000'))
   })
   it('should be possible to mint 20kb', () => {
     const largecontent = new Uint8Array(20 * 1024)
@@ -407,7 +382,7 @@ describe('nonSpec interface', () => {
     sha256HashUpdate(hashstate, Uint8Array.wrap(String.UTF8.encode(listenRequestPassword)))
     nonSpec.request_listening(aliceToken, base64.encode(sha256HashFinal(hashstate)))
 
-    expect(nonSpec.get_token_content_base64(aliceToken, 'alice',listenRequestPassword)).toStrictEqual(largecontent)
+    expect(nonSpec.get_token_content_base64(aliceToken, 'alice', listenRequestPassword)).toStrictEqual(largecontent)
   })
   it('should be possible to view token for free', () => {
     VMContext.setAttached_deposit(mintprice);
