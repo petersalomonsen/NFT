@@ -42,61 +42,100 @@ async function loadMusic(tokenId, remimxTokenId, sampleRate) {
     eventlist = {};
 
     const mixtokendata = await getRemixTokenContent(remimxTokenId + '');
-    const musicdata = pako.ungzip(base64ToByteArray(mixtokendata.split(';')[3]));
-    const mixerdatapos = musicdata.length - 34;
-    
-    bpm = musicdata[mixerdatapos + 32];
+    let musicdata = pako.ungzip(base64ToByteArray(mixtokendata.split(';')[3]));
+    numparts = musicdata[0];
 
+    let n = 1;
+    const parts = [];
+
+    for (let partno = 0; partno < numparts; partno++) {
+        const channel = musicdata[n];
+        const numnotes = musicdata[n + 1];
+        const numcontrollers = musicdata[n + 2];
+        n += 3;
+        const controllersndx = n + (numnotes * 4);
+        const nextchannelndx = controllersndx + (numcontrollers * 3);
+        parts[partno] = {
+            events: []
+        };
+
+        while (n < controllersndx) {
+            const evtstart = musicdata[n++] / SERIALIZE_TIME_RESOLUTION;
+            const duration = musicdata[n++] / SERIALIZE_TIME_RESOLUTION;
+            const noteNumber = musicdata[n++];
+            const velocityValue = musicdata[n++];
+            parts[partno].events.push({pos: evtstart, message: [0x90 + channel, noteNumber, velocityValue]});
+            parts[partno].events.push({pos: evtstart + duration, message: [0x90 + channel, noteNumber, 0]});
+        }
+        while (n < nextchannelndx) {
+            const evtstart = musicdata[n++] / SERIALIZE_TIME_RESOLUTION;
+            const controllerNumber = musicdata[n++];
+            const controllerValue = musicdata[n++];
+            parts[partno].events.push({pos: evtstart, message: [0xb0 + channel, controllerNumber, controllerValue]});
+        }
+    }
+
+    const mixerdatapos = n;
+
+    bpm = musicdata[mixerdatapos + 32];
     const beatposToBufferNo = (pos) => Math.round((pos * 60 / bpm) * sampleRate / wasmbuffersize);
     const addEvent = (pos, data) => {
         const bufferno = beatposToBufferNo(pos);
         if (!eventlist[bufferno]) {
-            eventlist[bufferno] = [];    
+            eventlist[bufferno] = [];
         }
         eventlist[bufferno].push(data);
     };
+
     musicdata.slice(mixerdatapos, mixerdatapos + 32)
-    .forEach((v, ndx) => {
-        const channel = Math.floor(ndx / 2);
-        if (ndx % 2 === 0) {
-            addEvent(0,[0xb0 + channel, 7, v]);
-        } else {
-            addEvent(0,[0xb0 + channel, 10, v]);
+        .forEach((v, ndx) => {
+            const channel = Math.floor(ndx / 2);
+            if (ndx % 2 === 0) {
+                addEvent(0, [0xb0 + channel, 7, v]);
+            } else {
+                addEvent(0, [0xb0 + channel, 10, v]);
+            }
+        });
+
+    let partschedulelength = musicdata[mixerdatapos + 34];
+    let partschedulendx = mixerdatapos + 35;
+
+    const partschedule = [];
+    for (let psch = 0; psch < partschedulelength; psch++) {
+        partschedule.push({
+            beat: musicdata[partschedulendx++],
+            part: musicdata[partschedulendx++],
+            repeat: musicdata[partschedulendx++]
+        });
+    }
+
+    let partlengthsndx = partschedulendx;
+    parts.forEach((part) => {
+        part.length = musicdata[partlengthsndx++];
+    });
+
+    let endOfSong = 0;
+    partschedule.forEach((psch) => {
+        const part = parts[psch.part];
+
+        const numberOfTimesToPlayPart = psch.repeat + 1;
+        const endOfRepeatedParts = psch.beat + (part.length * numberOfTimesToPlayPart);
+        if (endOfRepeatedParts > endOfSong) {
+            endOfSong = endOfRepeatedParts;
+        }
+        for (let repeatCount = 0; repeatCount < numberOfTimesToPlayPart; repeatCount++) {
+            part.events.forEach((evt) => {                    
+                addEvent(evt.pos + psch.beat + part.length * repeatCount, evt.message);
+            });
         }
     });
 
-    endBufferNo = beatposToBufferNo(musicdata[mixerdatapos + 32 + 1]);
-    const pianorolldatabytes = musicdata.slice(0, mixerdatapos);
-    
-    let n = 0;
-    while (n<pianorolldatabytes.length) {
-        const channel = pianorolldatabytes[n];
-        const numnotes = pianorolldatabytes[n + 1];
-        const numcontrollers = pianorolldatabytes[n + 2];
-        n += 3;
-        const controllersndx = n + (numnotes * 4);
-        const nextchannelndx = controllersndx + (numcontrollers * 3);
-        while (n < controllersndx) {
-            const evtstart = pianorolldatabytes[n++] / SERIALIZE_TIME_RESOLUTION;
-            const duration = pianorolldatabytes[n++] / SERIALIZE_TIME_RESOLUTION;
-            const noteNumber = pianorolldatabytes[n++];
-            const velocityValue = pianorolldatabytes[n++];
-            addEvent(evtstart,[0x90 + channel,noteNumber,velocityValue]);
-            addEvent(evtstart + duration,[0x90 + channel,noteNumber,0]);
-        }
-        while (n < nextchannelndx) {
-            const evtstart = pianorolldatabytes[n++] / SERIALIZE_TIME_RESOLUTION;
-            const controllerNumber = pianorolldatabytes[n++];
-            const controllerValue = pianorolldatabytes[n++];
-            addEvent(evtstart,[0xb0 + channel, controllerNumber, controllerValue]);
-        }
-    }
-    
+    endBufferNo = beatposToBufferNo(endOfSong);
 }
 
 async function playMusic(ctx, analyzer) {
     wasm = (await WebAssembly.instantiate(wasm_bytes, { environment: { SAMPLERATE: ctx.sampleRate } })).instance.exports;
-    
+
     const numbuffers = 50;
     let bufferno = 0;
     const chunkInterval = wasmbuffersize * numbuffers / ctx.sampleRate;
@@ -110,10 +149,10 @@ async function playMusic(ctx, analyzer) {
     while (true) {
         const processorBuffer = ctx.createBuffer(2, wasmbuffersize * numbuffers, ctx.sampleRate);
         for (let n = 0; n < numbuffers; n++) {
-            eventlist[bufferno++]?.forEach(evt => wasm.shortmessage(evt[0],evt[1],evt[2]));
+            eventlist[bufferno++]?.forEach(evt => wasm.shortmessage(evt[0], evt[1], evt[2]));
 
             if (bufferno === endBufferNo) {
-                bufferno = 0;                
+                bufferno = 0;
             }
             wasm.fillSampleBuffer();
             processorBuffer.getChannelData(0).set(new Float32Array(wasm.memory.buffer,
@@ -126,7 +165,7 @@ async function playMusic(ctx, analyzer) {
         const bufferSource = ctx.createBufferSource();
         bufferSource.buffer = processorBuffer;
         bufferSource.connect(gainNode);
-        bufferSource.start(chunkStartTime);        
+        bufferSource.start(chunkStartTime);
         chunkStartTime += chunkInterval;
 
         await new Promise((r) => setTimeout(r, chunkInterval));
