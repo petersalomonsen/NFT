@@ -11,6 +11,9 @@ const nearconfig = {
 
 nearconfig.deps.keyStore = new nearApi.keyStores.BrowserLocalStorageKeyStore();
 
+const timeslider = document.getElementById('timeslider');
+const currenttimespan = document.getElementById('currenttimespan');
+
 const wasmbuffersize = 128;
 const SERIALIZE_TIME_RESOLUTION = 8;
 const COLUMNS_PER_BEAT = 8;
@@ -19,6 +22,13 @@ let wasm_bytes;
 let eventlist;
 let walletConnection;
 let endBufferNo;
+
+function bufferNoToTimeString(bufferNo, ctx) {
+    const time = bufferNo * wasmbuffersize / ctx.sampleRate;
+    const minutes = Math.floor(time / 60);
+    const seconds = Math.floor(time - minutes * 60);
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+}
 
 async function getTokenContent(token_id) {
     const near = await nearApi.connect(nearconfig);
@@ -131,13 +141,16 @@ async function loadMusic(tokenId, remimxTokenId, sampleRate) {
     });
 
     endBufferNo = beatposToBufferNo(endOfSong);
+    timeslider.max = endBufferNo;
 }
+
+let bufferno = 0;
 
 async function playMusic(ctx, analyzer) {
     wasm = (await WebAssembly.instantiate(wasm_bytes, { environment: { SAMPLERATE: ctx.sampleRate } })).instance.exports;
 
     const numbuffers = 50;
-    let bufferno = 0;
+    
     const chunkInterval = wasmbuffersize * numbuffers / ctx.sampleRate;
     const gainNode = ctx.createGain();
     gainNode.connect(ctx.destination);
@@ -168,6 +181,12 @@ async function playMusic(ctx, analyzer) {
         bufferSource.start(chunkStartTime);
         chunkStartTime += chunkInterval;
 
+        timeslider.value = bufferno;
+        currenttimespan.innerHTML = bufferNoToTimeString(bufferno, ctx);
         await new Promise((r) => setTimeout(r, chunkInterval));
     }
 }
+
+timeslider.addEventListener('input', () => {
+    bufferno = parseInt(timeslider.value);
+});
