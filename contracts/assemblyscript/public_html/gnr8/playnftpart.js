@@ -22,6 +22,9 @@ let wasm_bytes;
 let eventlist;
 let walletConnection;
 let endBufferNo;
+let initPromise;
+let audioWorkletNode;
+let playing;
 
 const audioContext = new AudioContext();
 
@@ -147,9 +150,9 @@ async function loadMusic(tokenId, remimxTokenId, sampleRate) {
 
 let bufferno = 0;
 
-async function playMusic() {
+async function initPlay() {
     await audioContext.audioWorklet.addModule('./audioworklet.js?35');
-    const audioWorkletNode = new AudioWorkletNode(audioContext, 'eventlist-and-wasmsynth-audio-worklet-processor', {
+    audioWorkletNode = new AudioWorkletNode(audioContext, 'eventlist-and-wasmsynth-audio-worklet-processor', {
         outputChannelCount: [2]
     });
     audioWorkletNode.port.start();
@@ -177,7 +180,21 @@ async function playMusic() {
     });    
 }
 
-async function loadAndPlayMusic() {
-    await loadMusic(7, 10);
-    playMusic();
+async function togglePlay() {
+    if (!initPromise) {
+        initPromise = new Promise(async (resolve, reject) => {
+            try {
+                await loadMusic(7, 10);
+                await initPlay();
+                
+            } catch (e) {
+                reject(e);
+            }
+        });
+    }
+    if (!audioWorkletNode) {
+        await initPromise;
+    }
+    audioWorkletNode.port.postMessage({toggleSongPlay: playing});
+    playing = !playing;
 }
