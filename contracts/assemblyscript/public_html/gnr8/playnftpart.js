@@ -11,8 +11,8 @@ const nearconfig = {
 
 nearconfig.deps.keyStore = new nearApi.keyStores.BrowserLocalStorageKeyStore();
 
-const timeslider = document.getElementById('timeslider');
-const currenttimespan = document.getElementById('currenttimespan');
+const timeSlider = document.getElementById('timeslider');
+const currentTimeSpan = document.getElementById('currenttimespan');
 
 const wasmbuffersize = 128;
 const SERIALIZE_TIME_RESOLUTION = 8;
@@ -23,8 +23,10 @@ let eventlist;
 let walletConnection;
 let endBufferNo;
 
-function bufferNoToTimeString(bufferNo, ctx) {
-    const time = bufferNo * wasmbuffersize / ctx.sampleRate;
+const audioContext = new AudioContext();
+
+function bufferNoToTimeString(bufferNo, sampleRate) {
+    const time = bufferNo * wasmbuffersize / sampleRate;
     const minutes = Math.floor(time / 60);
     const seconds = Math.floor(time - minutes * 60);
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
@@ -88,7 +90,7 @@ async function loadMusic(tokenId, remimxTokenId, sampleRate) {
     const mixerdatapos = n;
 
     bpm = musicdata[mixerdatapos + 32];
-    const beatposToBufferNo = (pos) => Math.round((pos * 60 / bpm) * sampleRate / wasmbuffersize);
+    const beatposToBufferNo = (pos) => Math.round((pos * 60 / bpm) * audioContext.sampleRate / wasmbuffersize);
     const addEvent = (pos, data) => {
         const bufferno = beatposToBufferNo(pos);
         if (!eventlist[bufferno]) {
@@ -139,54 +141,43 @@ async function loadMusic(tokenId, remimxTokenId, sampleRate) {
             });
         }
     });
-
     endBufferNo = beatposToBufferNo(endOfSong);
-    timeslider.max = endBufferNo;
+    timeSlider.max = endBufferNo;
 }
 
 let bufferno = 0;
 
-async function playMusic(ctx, analyzer) {
-    wasm = (await WebAssembly.instantiate(wasm_bytes, { environment: { SAMPLERATE: ctx.sampleRate } })).instance.exports;
-
-    const numbuffers = 50;
+async function playMusic() {
+    await audioContext.audioWorklet.addModule('./audioworklet.js?35');
+    const audioWorkletNode = new AudioWorkletNode(audioContext, 'eventlist-and-wasmsynth-audio-worklet-processor', {
+        outputChannelCount: [2]
+    });
+    audioWorkletNode.port.start();
+    audioWorkletNode.port.postMessage({
+        wasm: wasm_bytes,
+        eventlist: eventlist,
+        endBufferNo: endBufferNo
+    });
+    audioWorkletNode.connect(audioContext.destination);
     
-    const chunkInterval = wasmbuffersize * numbuffers / ctx.sampleRate;
-    const gainNode = ctx.createGain();
-    gainNode.connect(ctx.destination);
-    if (analyzer) {
-        analyzer.setInput(gainNode);
-    }
-    let chunkStartTime = ctx.currentTime + 0.2;
-
-    while (true) {
-        const processorBuffer = ctx.createBuffer(2, wasmbuffersize * numbuffers, ctx.sampleRate);
-        for (let n = 0; n < numbuffers; n++) {
-            eventlist[bufferno++]?.forEach(evt => wasm.shortmessage(evt[0], evt[1], evt[2]));
-
-            if (bufferno === endBufferNo) {
-                bufferno = 0;
+    const messageLoop = () => {        
+        audioWorkletNode.port.postMessage({getCurrentBufferNo: true});
+        audioWorkletNode.port.onmessage = (msg) => {
+            if (msg.data.currentBufferNo !== undefined) {
+                currentTimeSpan.innerHTML = bufferNoToTimeString(msg.data.currentBufferNo, audioContext.sampleRate);
+                timeSlider.value = msg.data.currentBufferNo;
             }
-            wasm.fillSampleBuffer();
-            processorBuffer.getChannelData(0).set(new Float32Array(wasm.memory.buffer,
-                wasm.samplebuffer,
-                wasmbuffersize), wasmbuffersize * n);
-            processorBuffer.getChannelData(1).set(new Float32Array(wasm.memory.buffer,
-                wasm.samplebuffer + (wasmbuffersize * 4),
-                wasmbuffersize), wasmbuffersize * n);
-        }
-        const bufferSource = ctx.createBufferSource();
-        bufferSource.buffer = processorBuffer;
-        bufferSource.connect(gainNode);
-        bufferSource.start(chunkStartTime);
-        chunkStartTime += chunkInterval;
+            requestAnimationFrame(() => messageLoop());
+        };        
+    };
+    messageLoop();
 
-        timeslider.value = bufferno;
-        currenttimespan.innerHTML = bufferNoToTimeString(bufferno, ctx);
-        await new Promise((r) => setTimeout(r, chunkInterval));
-    }
+    timeSlider.addEventListener('input', () => {
+        bufferno = audioWorkletNode.port.postMessage({seek: parseInt(timeSlider.value) });
+    });    
 }
 
-timeslider.addEventListener('input', () => {
-    bufferno = parseInt(timeslider.value);
-});
+async function loadAndPlayMusic() {
+    await loadMusic(7, 10);
+    playMusic();
+}
