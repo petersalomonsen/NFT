@@ -1,3 +1,5 @@
+import { insertVisualizationObjects, setVisualizationTime } from './visualizer.js';
+
 const nearconfig = {
     nodeUrl: 'https://rpc.mainnet.near.org',
     walletUrl: 'https://wallet.mainnet.near.org',
@@ -22,9 +24,11 @@ let wasm_bytes;
 let eventlist;
 let walletConnection;
 let endBufferNo;
+let endOfSong;
 let initPromise;
 let audioWorkletNode;
-let playing;
+let playing = false;
+let visualizationObjects
 
 const audioContext = new AudioContext();
 
@@ -55,10 +59,11 @@ function base64ToByteArray(base64encoded) {
 async function loadMusic(tokenId, remimxTokenId, sampleRate) {
     wasm_bytes = pako.ungzip(base64ToByteArray((await getTokenContent(tokenId + '')).replaceAll(/\"/g, '')));
     eventlist = {};
+    visualizationObjects = [];
 
     const mixtokendata = await getRemixTokenContent(remimxTokenId + '');
     let musicdata = pako.ungzip(base64ToByteArray(mixtokendata.split(';')[3]));
-    numparts = musicdata[0];
+    const numparts = musicdata[0];
 
     let n = 1;
     const parts = [];
@@ -71,7 +76,8 @@ async function loadMusic(tokenId, remimxTokenId, sampleRate) {
         const controllersndx = n + (numnotes * 4);
         const nextchannelndx = controllersndx + (numcontrollers * 3);
         parts[partno] = {
-            events: []
+            events: [],
+            visualizationObjects: []
         };
 
         while (n < controllersndx) {
@@ -79,14 +85,22 @@ async function loadMusic(tokenId, remimxTokenId, sampleRate) {
             const duration = musicdata[n++] / SERIALIZE_TIME_RESOLUTION;
             const noteNumber = musicdata[n++];
             const velocityValue = musicdata[n++];
-            parts[partno].events.push({pos: evtstart, message: [0x90 + channel, noteNumber, velocityValue]});
-            parts[partno].events.push({pos: evtstart + duration, message: [0x90 + channel, noteNumber, 0]});
+            parts[partno].events.push({ pos: evtstart, message: [0x90 + channel, noteNumber, velocityValue] });
+            parts[partno].events.push({ pos: evtstart + duration, message: [0x90 + channel, noteNumber, 0] });
+            parts[partno].visualizationObjects.push(
+                {
+                    time: evtstart,
+                    duration: duration,
+                    channel: channel,
+                    noteNumber: noteNumber,
+                    velocityValue: velocityValue
+                });
         }
         while (n < nextchannelndx) {
             const evtstart = musicdata[n++] / SERIALIZE_TIME_RESOLUTION;
             const controllerNumber = musicdata[n++];
             const controllerValue = musicdata[n++];
-            parts[partno].events.push({pos: evtstart, message: [0xb0 + channel, controllerNumber, controllerValue]});
+            parts[partno].events.push({ pos: evtstart, message: [0xb0 + channel, controllerNumber, controllerValue] });
         }
     }
 
@@ -129,7 +143,7 @@ async function loadMusic(tokenId, remimxTokenId, sampleRate) {
         part.length = musicdata[partlengthsndx++];
     });
 
-    let endOfSong = 0;
+    endOfSong = 0;
     partschedule.forEach((psch) => {
         const part = parts[psch.part];
 
@@ -139,8 +153,12 @@ async function loadMusic(tokenId, remimxTokenId, sampleRate) {
             endOfSong = endOfRepeatedParts;
         }
         for (let repeatCount = 0; repeatCount < numberOfTimesToPlayPart; repeatCount++) {
-            part.events.forEach((evt) => {                    
+            part.events.forEach((evt) => {
                 addEvent(evt.pos + psch.beat + part.length * repeatCount, evt.message);
+            });
+            part.visualizationObjects.forEach((visualizationObject) => {
+                visualizationObjects.push(Object.assign({}, visualizationObject,
+                    { time: visualizationObject.time + psch.beat + part.length * repeatCount }));
             });
         }
     });
@@ -151,7 +169,7 @@ async function loadMusic(tokenId, remimxTokenId, sampleRate) {
 let bufferno = 0;
 
 async function initPlay() {
-    await audioContext.audioWorklet.addModule('./audioworklet.js?35');
+    await audioContext.audioWorklet.addModule('./audioworkletprocessor.js');
     audioWorkletNode = new AudioWorkletNode(audioContext, 'eventlist-and-wasmsynth-audio-worklet-processor', {
         outputChannelCount: [2]
     });
@@ -162,22 +180,24 @@ async function initPlay() {
         endBufferNo: endBufferNo
     });
     audioWorkletNode.connect(audioContext.destination);
-    
-    const messageLoop = () => {        
-        audioWorkletNode.port.postMessage({getCurrentBufferNo: true});
+
+    const messageLoop = () => {
+        audioWorkletNode.port.postMessage({ getCurrentBufferNo: true });
         audioWorkletNode.port.onmessage = (msg) => {
             if (msg.data.currentBufferNo !== undefined) {
                 currentTimeSpan.innerHTML = bufferNoToTimeString(msg.data.currentBufferNo, audioContext.sampleRate);
                 timeSlider.value = msg.data.currentBufferNo;
+                setVisualizationTime(endOfSong * msg.data.currentBufferNo / endBufferNo);
             }
+
             requestAnimationFrame(() => messageLoop());
-        };        
+        };
     };
     messageLoop();
 
     timeSlider.addEventListener('input', () => {
-        bufferno = audioWorkletNode.port.postMessage({seek: parseInt(timeSlider.value) });
-    });    
+        bufferno = audioWorkletNode.port.postMessage({ seek: parseInt(timeSlider.value) });
+    });
 }
 
 async function togglePlay() {
@@ -185,16 +205,39 @@ async function togglePlay() {
         initPromise = new Promise(async (resolve, reject) => {
             try {
                 await loadMusic(7, 10);
+                insertVisualizationObjects(visualizationObjects);
                 await initPlay();
-                
+                resolve();
             } catch (e) {
                 reject(e);
             }
         });
     }
-    if (!audioWorkletNode) {
-        await initPromise;
-    }
-    audioWorkletNode.port.postMessage({toggleSongPlay: playing});
+    await initPromise;
+
     playing = !playing;
+    console.log(playing);
+    audioWorkletNode.port.postMessage({ toggleSongPlay: playing });
 }
+
+window.togglePlay = () => {
+    togglePlay();
+    togglePlayButton.innerHTML = playing ? '&#9654;' : '&#9725;';
+}
+
+(async () => {
+    nearconfig.deps.keyStore = new nearApi.keyStores.BrowserLocalStorageKeyStore();
+    window.near = await nearApi.connect(nearconfig);
+    const walletConnection = new nearApi.WalletConnection(near);
+    window.walletConnection = walletConnection;
+
+    // Load in account data
+    const loggedInUser = walletConnection.getAccountId();
+    if (loggedInUser) {
+        document.getElementById('username').innerHTML = loggedInUser;
+        document.getElementById('userpanel').style.display = 'block';
+        document.getElementById('controlpanel').style.display = 'block';
+    } else {
+        document.getElementById('loginpanel').style.display = 'block';
+    }
+})();

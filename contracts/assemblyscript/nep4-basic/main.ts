@@ -295,6 +295,11 @@ export function request_listening(token_id: TokenId, listenRequestPasswordHash: 
   }
 }
 
+export function view_listening_credit(account: AccountId): i32 {
+  const currentListenCredit: i32 = listenCredit.contains(account) ? I32.parseInt(listenCredit.get(account)!) : 0
+  return currentListenCredit
+}
+
 @payable
 export function buy_listening_credit(): void {
   const predecessor = context.predecessor
