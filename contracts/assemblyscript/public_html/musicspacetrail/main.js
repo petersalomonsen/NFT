@@ -1,6 +1,6 @@
 import { insertVisualizationObjects, setVisualizationTime } from './visualizer.js';
 
-const nearconfig = {
+/*const nearconfig = {
     nodeUrl: 'https://rpc.mainnet.near.org',
     walletUrl: 'https://wallet.mainnet.near.org',
     helperUrl: 'https://helper.mainnet.near.org',
@@ -9,12 +9,23 @@ const nearconfig = {
     deps: {
         keyStore: null
     }
-};
+};*/
 
+const nearconfig = {
+    nodeUrl: 'https://rpc.testnet.near.org',
+    walletUrl: 'https://wallet.testnet.near.org',
+    helperUrl: 'https://helper.testnet.near.org',
+    networkId: 'testnet',
+    contractName: 'sellnft.testnet',
+    deps: {
+        keyStore: null
+    }
+};
 nearconfig.deps.keyStore = new nearApi.keyStores.BrowserLocalStorageKeyStore();
 
 const timeSlider = document.getElementById('timeslider');
 const currentTimeSpan = document.getElementById('currenttimespan');
+const infopanel = document.getElementById('info');
 
 const wasmbuffersize = 128;
 const SERIALIZE_TIME_RESOLUTION = 8;
@@ -204,7 +215,8 @@ async function togglePlay() {
     if (!initPromise) {
         initPromise = new Promise(async (resolve, reject) => {
             try {
-                await loadMusic(7, 10);
+                //await loadMusic(7, 10);
+                await loadMusic(34, 43);
                 insertVisualizationObjects(visualizationObjects);
                 await initPlay();
                 resolve();
@@ -216,13 +228,20 @@ async function togglePlay() {
     await initPromise;
 
     playing = !playing;
-    console.log(playing);
     audioWorkletNode.port.postMessage({ toggleSongPlay: playing });
 }
 
 window.togglePlay = () => {
+    togglePlayButton.innerHTML = playing ? '&#9654;': '&#9725;';
     togglePlay();
-    togglePlayButton.innerHTML = playing ? '&#9654;' : '&#9725;';
+    
+    if (playing) {        
+        infopanel.classList.remove('fadeout');
+        infopanel.classList.add('fadein');
+    } else {
+        infopanel.classList.remove('fadein');
+        infopanel.classList.add('fadeout');
+    }
 }
 
 (async () => {

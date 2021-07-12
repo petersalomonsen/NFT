@@ -8,6 +8,7 @@
                 color: white;
                 overflow: hidden;
                 margin: 0;
+                user-select: none;
             }
             #timeslider {
                 width: 100%;
@@ -31,6 +32,25 @@
                 margin: auto;
                 text-align: center;
                 margin-top: 20px;
+                
+            }
+            .fadein {
+                animation-name: fadein;
+                animation-duration: 2s;
+                animation-fill-mode: forwards;
+            }
+            .fadeout {
+                animation-name: fadeout;
+                animation-duration: 2s;
+                animation-fill-mode: forwards;
+            }
+            @keyframes fadein {
+                to {color: rgba(255,255,255,1.0);}
+                from {color: rgba(255,255,255,0.0);}
+            }
+            @keyframes fadeout {
+                from {color: rgba(255,255,255,1.0);}
+                to {color: rgba(255,255,255,0.0);}
             }
             #loginpanel {
                 display: none;
@@ -41,15 +61,17 @@
         </style>
     </head>
     <body>
-        <div id="info">
+        <div id="info" class="fadein">
             <h1>music space trail</h1>
-            <p style="color: #888">copyright (c) 2021 - Peter Salomonsen</p>
 
             <div id="loginpanel">
                 Please log in
             </div>
             <div id="userpanel">
-                <h3>Welcome <span id="username"></span></h3>
+                <h3>welcome <span id="username"></span></h3>
+                <p>You have <span id="creditscount"></span> credits left.</p>
+                <button>Buy 10 ( 0.1N ) </button>
+                <button>Buy 100 ( 1N )</button>
             </div>
             
         </div>
