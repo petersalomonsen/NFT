@@ -33,13 +33,13 @@ const COLUMNS_PER_BEAT = 8;
 let bpm;
 let wasm_bytes;
 let eventlist;
-let walletConnection;
+
 let endBufferNo;
 let endOfSong;
 let initPromise;
 let audioWorkletNode;
 let playing = false;
-let visualizationObjects
+let visualizationObjects;
 
 const audioContext = new AudioContext();
 
@@ -50,13 +50,40 @@ function bufferNoToTimeString(bufferNo, sampleRate) {
     return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 }
 
-async function getTokenContent(token_id) {
-    const near = await nearApi.connect(nearconfig);
-    walletConnection = new nearApi.WalletConnection(near);
+export async function byteArrayToBase64(data) {
+    return await new Promise(r => {
+        const fr = new FileReader();
+        fr.onload = () => r(fr.result.split('base64,')[1]);
+        fr.readAsDataURL(new Blob([data]));
+    });
+}
 
-    const result = await walletConnection.account()
-        .viewFunction(nearconfig.contractName, 'view_token_content_base64', { token_id: token_id });
-    return result;
+async function getTokenContent(token_id) {
+    const account = walletConnection.account();
+
+    const listenRequestPassword = await byteArrayToBase64(crypto.getRandomValues(new Uint8Array(64)));
+    const listenRequestPasswordHash = await byteArrayToBase64(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(listenRequestPassword)));    
+    await account.functionCall(nearconfig.contractName, 'request_listening', { token_id: '' + token_id, listenRequestPasswordHash: listenRequestPasswordHash });
+
+    return await account.viewFunction(nearconfig.contractName, 'get_token_content_base64',
+            { token_id: token_id,
+             caller: account.accountId,
+             listenRequestPassword: listenRequestPassword });
+}
+
+async function buyListeningCredit(amount) {
+    await walletConnection.account().functionCall(nearconfig.contractName, 'buy_listening_credit', {},
+        null, nearApi.utils.format.parseNearAmount(''+amount));
+}
+window.buyListeningCredit = buyListeningCredit;
+
+async function viewListeningCredit() {
+    const account = walletConnection.account();
+    const result = await account.viewFunction(nearconfig.contractName, 'view_listening_credit', {account: account.accountId});
+    document.getElementById('creditscount').innerHTML = `${result}`;
+    if (result > 0) {
+        document.getElementById('controlpanel').style.display = 'block';
+    }
 }
 
 async function getRemixTokenContent(id) {
@@ -217,6 +244,7 @@ async function togglePlay() {
             try {
                 //await loadMusic(7, 10);
                 await loadMusic(34, 43);
+                viewListeningCredit();
                 insertVisualizationObjects(visualizationObjects);
                 await initPlay();
                 resolve();
@@ -247,15 +275,14 @@ window.togglePlay = () => {
 (async () => {
     nearconfig.deps.keyStore = new nearApi.keyStores.BrowserLocalStorageKeyStore();
     window.near = await nearApi.connect(nearconfig);
-    const walletConnection = new nearApi.WalletConnection(near);
-    window.walletConnection = walletConnection;
+    window.walletConnection = new nearApi.WalletConnection(near);
 
     // Load in account data
     const loggedInUser = walletConnection.getAccountId();
     if (loggedInUser) {
         document.getElementById('username').innerHTML = loggedInUser;
         document.getElementById('userpanel').style.display = 'block';
-        document.getElementById('controlpanel').style.display = 'block';
+        await viewListeningCredit();
     } else {
         document.getElementById('loginpanel').style.display = 'block';
     }
