@@ -272,6 +272,15 @@ window.togglePlay = () => {
     }
 }
 
+window.login = async () => {
+    await walletConnection.requestSignIn(
+        nearconfig.contractName,
+        'wasm-music'
+    );
+    await loadAccountData();
+}
+
+
 (async () => {
     nearconfig.deps.keyStore = new nearApi.keyStores.BrowserLocalStorageKeyStore();
     window.near = await nearApi.connect(nearconfig);

@@ -304,9 +304,9 @@ export function view_listening_credit(account: AccountId): i32 {
 export function buy_listening_credit(): void {
   const predecessor = context.predecessor
 
-  const currentListenCredit: i32 = listenCredit.contains(predecessor) ? I32.parseInt(listenCredit.get(predecessor)!) : 0
+  const currentListenCredit: u128 = listenCredit.contains(predecessor) ? u128.fromString(listenCredit.get(predecessor)!) : u128.Zero
   listenCredit.set(predecessor, (currentListenCredit +
-    changetype<i32>(context.attachedDeposit / LISTEN_PRICE)).toString())
+    (context.attachedDeposit / LISTEN_PRICE)).toString())
 }
 
 export function view_token_content_base64(token_id: TokenId): String {
