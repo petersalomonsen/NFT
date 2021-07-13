@@ -12,7 +12,7 @@
     "test": "yarn test:unit:as && yarn test:unit:rs",
     "test:unit:as": "asp --verbose --nologo -c contracts/assemblyscript/as-pect.config.js -f unit.spec",
     "test:unit:rs": "(cd contracts/rust && cargo test -- --nocapture --color always)",
-    "simulator": "jest contracts/assemblyscript/simulator",
+    "simulator": "cp contracts/assemblyscript/simulator/sdk-patch-runtime.js node_modules/near-sdk-simulator/dist/runtime.js &&jest contracts/assemblyscript/simulator",
     "deploy:dev": "echo n | near dev-deploy contracts/assemblyscript/build/release/main.wasm",
     "test:dev": "jest contracts/assemblyscript/testnet",
     "serve": "http-server contracts/assemblyscript/public_html"

@@ -273,7 +273,7 @@ export function view_remix_content(token_id: TokenId): string {
   return remixTokens.getSome(token_id)
 }
 
-export function request_listening(token_id: TokenId, listenRequestPasswordHash: string): ContractPromiseBatch {
+export function request_listening(token_id: TokenId, listenRequestPasswordHash: string): void {
   const predecessor = context.predecessor
 
   const owner = tokenToOwner.getSome(token_id)
@@ -282,17 +282,14 @@ export function request_listening(token_id: TokenId, listenRequestPasswordHash: 
     const currentListenCredit = I32.parseInt(listenCredit.get(predecessor)!)
     assert(currentListenCredit > 0, ERROR_NO_LISTENING_CREDIT)
     listenCredit.set(predecessor, (currentListenCredit - 1).toString())
+
+    // transfer listen credit to the owner
+    const ownerListenCredit: i32 = listenCredit.contains(predecessor) ? I32.parseInt(listenCredit.get(predecessor)!) : 0
+    listenCredit.set(owner, (ownerListenCredit + 1).toString())
   }
   const listeningKey = 'l:' + predecessor + ':' + token_id.toString()
 
   Storage.set<ListenRequest>(listeningKey, listenRequestPasswordHash + ',' + context.blockTimestamp.toString())
-  if (owner != predecessor) {
-    // 90 % to owner
-    const amountToOwner = changetype<u128>(LISTEN_PRICE * u128.fromI32(90) / u128.fromI32(100))
-    return ContractPromiseBatch.create(owner).transfer(amountToOwner)
-  } else {
-    return ContractPromiseBatch.create(owner)
-  }
 }
 
 export function view_listening_credit(account: AccountId): i32 {

@@ -332,6 +332,7 @@ describe('nonSpec interface', () => {
     VMContext.setPredecessor_account_id(alice)
     const tokenId = nonSpec.mint_to_base64(alice, content)
     VMContext.setPredecessor_account_id(bob)
+    expect(nonSpec.view_listening_credit(alice)).toBe(0)
     expect(nonSpec.view_listening_credit(bob)).toBe(0)
     VMContext.setAttached_deposit(nonSpec.LISTEN_PRICE)
     nonSpec.buy_listening_credit()
@@ -342,6 +343,7 @@ describe('nonSpec interface', () => {
     nonSpec.request_listening(tokenId, base64.encode(sha256HashFinal(hashstate)))    
     expect(base64.encode(nonSpec.get_token_content_base64(tokenId, bob, listenRequestPassword))).toStrictEqual(content)
     expect(nonSpec.view_listening_credit(bob)).toBe(0)
+    expect(nonSpec.view_listening_credit(alice)).toBe(1)
   })
   it('listening request should only last 5 minutes', () => {
     VMContext.setAttached_deposit(mintprice);

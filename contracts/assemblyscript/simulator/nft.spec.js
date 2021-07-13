@@ -80,38 +80,6 @@ it('should buy a remix, put it up for sale, and another buying it', () => {
         expect((contract.balance - contractBalanceBefore) / Math.pow(10, 20)).toBeCloseTo(Math.pow(10, 4));
 });
 
-it('should distribute royalties for listening', () => {
-        const runtime = new sim.Runtime();
-        const contract = runtime.newAccount('contract', 'contracts/assemblyscript/build/release/main.wasm');
-        const peter = runtime.newAccount('peter');
-        const bob = runtime.newAccount('bob');
-        const alice = runtime.newAccount('alice');
-        const carol = runtime.newAccount('carol');
-
-        // peter is minting
-        let result = peter.call_other('contract', 'mint_to_base64', {
-                owner_id: 'peter', supportmixing: true,
-                contentbase64: Buffer.from('test').toString('base64')
-        }, null, '800000000000000000000');
-
-        const token_id = JSON.parse(result.return_data);
-        expect(token_id).toBe(1);
-
-        // carol listens
-        result = carol.call_other('contract', 'buy_listening_credit',
-                {}, null, '100000000000000000000000000');
-
-        expect(result.err).toBe(null);
-
-        result = carol.call_other('contract', 'request_listening',
-                { token_id: (token_id).toString(), listenRequestPasswordHash: 'aaaa' });
-        expect(result.err).toBe(null);
-
-        expect(result.result.receipts[0].receiver_id).toBe('peter');
-        // 90% to token owner
-        expect(result.result.receipts[0].actions[0].Transfer.deposit).toBe(90 * Math.pow(10, 20));
-});
-
 it('should buy contract and transfer funds to beneficiary', () => {
         const runtime = new sim.Runtime();
         const contract = runtime.newAccount('contract', 'contracts/assemblyscript/build/release/main.wasm');
