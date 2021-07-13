@@ -28,11 +28,10 @@
                 right: 5px;
                 display: none;
             }
-            #info {
+            #info, #transactionstatus {
                 margin: auto;
                 text-align: center;
-                margin-top: 20px;
-                
+                margin-top: 20px;                
             }
             .fadein {
                 animation-name: fadein;
@@ -73,10 +72,10 @@
                 <p>You have <span id="creditscount"></span> credits left.</p>
                 <button onclick="buyListeningCredit(0.1)">Buy 10 ( 0.1N ) </button>
                 <button onclick="buyListeningCredit(1)">Buy 100 ( 1N )</button>
-                <div id="transactionstatus"></div>
+                
             </div>
-            
         </div>
+        <p id="transactionstatus"></p>
         <div id="controlpanel">
             <p><button id="togglePlayButton" onclick="togglePlay()">
                 &#9654;

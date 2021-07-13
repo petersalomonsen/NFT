@@ -285,15 +285,18 @@ async function togglePlay() {
 
 window.togglePlay = async () => {
     togglePlayButton.innerHTML = playing ? '&#9654;' : '&#9725;';
-    await togglePlay();
+
 
     if (playing) {
         infopanel.classList.remove('fadeout');
         infopanel.classList.add('fadein');
+        infopanel.querySelectorAll('button').forEach(b => b.style.visibility = 'visible');
     } else {
+        infopanel.querySelectorAll('button').forEach(b => b.style.visibility = 'hidden');
         infopanel.classList.remove('fadein');
         infopanel.classList.add('fadeout');
     }
+    await togglePlay();
 }
 
 window.login = async () => {
