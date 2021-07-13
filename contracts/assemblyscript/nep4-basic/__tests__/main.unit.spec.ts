@@ -27,6 +27,7 @@ const mintprice = u128.fromString('800000000000000000000');
 
 let currentTokenId: u64;
 let currentMix: string;
+let currentListenRequestPassword: string;
 
 describe('grant_access', () => {
   it('grants access to the given account_id for all the tokens that account has', () => {
@@ -340,10 +341,57 @@ describe('nonSpec interface', () => {
     const listenRequestPassword = 'abcd1234'
     const hashstate = sha256HashInit()
     sha256HashUpdate(hashstate, Uint8Array.wrap(String.UTF8.encode(listenRequestPassword)))
-    nonSpec.request_listening(tokenId, base64.encode(sha256HashFinal(hashstate)))    
+    nonSpec.request_listening(tokenId, base64.encode(sha256HashFinal(hashstate)))
     expect(base64.encode(nonSpec.get_token_content_base64(tokenId, bob, listenRequestPassword))).toStrictEqual(content)
     expect(nonSpec.view_listening_credit(bob)).toBe(0)
     expect(nonSpec.view_listening_credit(alice)).toBe(1)
+  })
+  it('one listening credit should include a remix token', () => {
+    VMContext.setAttached_deposit(mintprice);
+    VMContext.setPredecessor_account_id(alice)
+    const tokenId = nonSpec.mint_to_base64(alice, content, true)
+
+    VMContext.setPredecessor_account_id(carol)
+    const mixcontent: u8[] = [66, 33, 22];
+    nonSpec.publish_token_mix(tokenId, mixcontent)
+    let mixes = nonSpec.get_token_mixes(tokenId)
+    expect(mixes.length).toBe(1)
+    const mix = mixes[0]
+
+    VMContext.setAttached_deposit(u128.fromString('10000000000000000000000000'))
+    nonSpec.buy_mix(tokenId, mixes[0])
+
+    mixes = nonSpec.get_token_mixes(tokenId)
+
+    const remixNFTid = parseInt(mixes[0].split(';')[1].split(':')[1]) as u64
+
+    VMContext.setPredecessor_account_id(bob)
+    expect(nonSpec.view_listening_credit(alice)).toBe(0)
+    expect(nonSpec.view_listening_credit(bob)).toBe(0)
+    VMContext.setAttached_deposit(nonSpec.LISTEN_PRICE)
+    nonSpec.buy_listening_credit()
+    expect(nonSpec.view_listening_credit(bob)).toBe(1)
+    const listenRequestPassword = 'abcd1234'
+    currentListenRequestPassword = listenRequestPassword
+
+    currentTokenId = remixNFTid
+    expect(() => {
+      nonSpec.get_remix_token_content(currentTokenId, bob, currentListenRequestPassword)
+    }).toThrow()
+
+    const hashstate = sha256HashInit()
+    sha256HashUpdate(hashstate, Uint8Array.wrap(String.UTF8.encode(listenRequestPassword)))
+    nonSpec.request_listening(tokenId, base64.encode(sha256HashFinal(hashstate)), remixNFTid)
+    expect(() => {
+      nonSpec.get_remix_token_content(currentTokenId, bob, currentListenRequestPassword)
+    }).not.toThrow()
+
+    expect(base64.encode(nonSpec.get_token_content_base64(tokenId, bob, listenRequestPassword))).toStrictEqual(content)
+    expect(nonSpec.get_remix_token_content(remixNFTid, bob, listenRequestPassword)).toBe(`${tokenId};${mix}`)
+
+    expect(nonSpec.view_listening_credit(bob)).toBe(0)
+    expect(nonSpec.view_listening_credit(alice)).toBe(1)
+    expect(nonSpec.view_listening_credit(carol)).toBe(1)
   })
   it('listening request should only last 5 minutes', () => {
     VMContext.setAttached_deposit(mintprice);

@@ -273,23 +273,31 @@ export function view_remix_content(token_id: TokenId): string {
   return remixTokens.getSome(token_id)
 }
 
-export function request_listening(token_id: TokenId, listenRequestPasswordHash: string): void {
-  const predecessor = context.predecessor
-
+function spend_listening_credit(listener: string, token_id: TokenId, listenRequestPasswordHash: string, amount: i32 = 1): void {
   const owner = tokenToOwner.getSome(token_id)
-  if (owner != predecessor) {
-    assert(listenCredit.contains(predecessor), ERROR_NO_LISTENING_CREDIT)
-    const currentListenCredit = I32.parseInt(listenCredit.get(predecessor)!)
-    assert(currentListenCredit > 0, ERROR_NO_LISTENING_CREDIT)
-    listenCredit.set(predecessor, (currentListenCredit - 1).toString())
+  if (owner != listener) {
+    assert(listenCredit.contains(listener), ERROR_NO_LISTENING_CREDIT)
+    const currentListenCredit = I32.parseInt(listenCredit.get(listener)!)
+    if (amount > 0) {
+      assert(currentListenCredit >= amount, ERROR_NO_LISTENING_CREDIT)
+      listenCredit.set(listener, (currentListenCredit - 1).toString())
+    }
 
-    // transfer listen credit to the owner
-    const ownerListenCredit: i32 = listenCredit.contains(predecessor) ? I32.parseInt(listenCredit.get(predecessor)!) : 0
+    // always give the owner some credit back
+    const ownerListenCredit: i32 = listenCredit.contains(listener) ? I32.parseInt(listenCredit.get(listener)!) : 0
     listenCredit.set(owner, (ownerListenCredit + 1).toString())
   }
-  const listeningKey = 'l:' + predecessor + ':' + token_id.toString()
-
+  const listeningKey = 'l:' + listener + ':' + token_id.toString()
   Storage.set<ListenRequest>(listeningKey, listenRequestPasswordHash + ',' + context.blockTimestamp.toString())
+}
+
+export function request_listening(token_id: TokenId, listenRequestPasswordHash: string, remix_token_id: TokenId = 0): void {
+  const listener = context.predecessor
+  spend_listening_credit(listener, token_id, listenRequestPasswordHash)
+  if (remix_token_id > 0) {
+    // free listening for the remix token
+    spend_listening_credit(listener, remix_token_id, listenRequestPasswordHash, 0)
+  }
 }
 
 export function view_listening_credit(account: AccountId): i32 {
@@ -310,7 +318,7 @@ export function view_token_content_base64(token_id: TokenId): String {
   return base64.encode(Storage.getBytes('t' + token_id.toString())!)
 }
 
-export function get_token_content_base64(token_id: TokenId, caller: string, listenRequestPassword: string): Uint8Array {
+function verifyListenRequestPassword(token_id: TokenId, caller: string, listenRequestPassword: string): void {
   const listeningKey = 'l:' + caller + ':' + token_id.toString()
 
   assert(Storage.contains(listeningKey), ERROR_LISTENING_REQUIRES_PAYMENT)
@@ -331,9 +339,17 @@ export function get_token_content_base64(token_id: TokenId, caller: string, list
 
   assert(hashEquals, ERROR_LISTENING_NOT_AUTHORIZED)
   assert((context.blockTimestamp - listenRequestTimeStamp) < LISTEN_REQUEST_TIMEOUT, ERROR_LISTENING_EXPIRED)
+}
 
+export function get_token_content_base64(token_id: TokenId, caller: string, listenRequestPassword: string): Uint8Array {
+  verifyListenRequestPassword(token_id, caller, listenRequestPassword)
   const contentbytes = Storage.getBytes('t' + token_id.toString())!
   return contentbytes
+}
+
+export function get_remix_token_content(token_id: TokenId, caller: string, listenRequestPassword: string): string {
+  verifyListenRequestPassword(token_id, caller, listenRequestPassword)
+  return remixTokens.getSome(token_id)
 }
 
 export function sell_token(token_id: TokenId, price: u128): void {
@@ -392,11 +408,9 @@ export function buy_mix(original_token_id: TokenId, mix: string): ContractPromis
   assert(mix.split(';')[1].indexOf('nft:') !== 0, 'mix is already an nft')
 
   let mixes: Array<string> = tokenMixes.get(original_token_id)!
-  let matchingMixIndex = -1;
 
   for (let n = 0; n < mixes.length; n++) {
     if (mixes[n] == mix) {
-      matchingMixIndex = n;
       // create a new NFT
       const tokenId = storage.getPrimitive<u64>(TOTAL_SUPPLY, 1)
 

@@ -26,6 +26,7 @@ nearconfig.deps.keyStore = new nearApi.keyStores.BrowserLocalStorageKeyStore();
 const timeSlider = document.getElementById('timeslider');
 const currentTimeSpan = document.getElementById('currenttimespan');
 const infopanel = document.getElementById('info');
+const transactionstatus = document.getElementById('transactionstatus');
 
 const wasmbuffersize = 128;
 const SERIALIZE_TIME_RESOLUTION = 8;
@@ -58,49 +59,72 @@ export async function byteArrayToBase64(data) {
     });
 }
 
-async function getTokenContent(token_id) {
+async function createListenRequest(token_id, remix_token_id) {
     const account = walletConnection.account();
 
     const listenRequestPassword = await byteArrayToBase64(crypto.getRandomValues(new Uint8Array(64)));
-    const listenRequestPasswordHash = await byteArrayToBase64(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(listenRequestPassword)));    
-    await account.functionCall(nearconfig.contractName, 'request_listening', { token_id: '' + token_id, listenRequestPasswordHash: listenRequestPasswordHash });
+    const listenRequestPasswordHash = await byteArrayToBase64(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(listenRequestPassword)));
+    await account.functionCall(nearconfig.contractName, 'request_listening', {
+        token_id: `${token_id}`,
+        listenRequestPasswordHash: listenRequestPasswordHash,
+        remix_token_id: `${remix_token_id}`
+    });
+    return listenRequestPassword;
+}
 
+async function getTokenContent(token_id, listenRequestPassword) {
+    const account = walletConnection.account();
     return await account.viewFunction(nearconfig.contractName, 'get_token_content_base64',
-            { token_id: token_id,
-             caller: account.accountId,
-             listenRequestPassword: listenRequestPassword });
+        {
+            token_id: `${token_id}`,
+            caller: account.accountId,
+            listenRequestPassword: listenRequestPassword
+        });
+}
+
+async function getRemixTokenContent(token_id, listenRequestPassword) {
+    const account = walletConnection.account();
+    return await account.viewFunction(nearconfig.contractName, 'get_remix_token_content',
+        {
+            token_id: `${token_id}`,
+            caller: account.accountId,
+            listenRequestPassword: listenRequestPassword
+        }
+    );
 }
 
 async function buyListeningCredit(amount) {
     await walletConnection.account().functionCall(nearconfig.contractName, 'buy_listening_credit', {},
-        null, nearApi.utils.format.parseNearAmount(''+amount));
+        null, nearApi.utils.format.parseNearAmount('' + amount));
 }
 window.buyListeningCredit = buyListeningCredit;
 
 async function viewListeningCredit() {
     const account = walletConnection.account();
-    const result = await account.viewFunction(nearconfig.contractName, 'view_listening_credit', {account: account.accountId});
+    const result = await account.viewFunction(nearconfig.contractName, 'view_listening_credit', { account: account.accountId });
     document.getElementById('creditscount').innerHTML = `${result}`;
     if (result > 0) {
         document.getElementById('controlpanel').style.display = 'block';
     }
 }
 
-async function getRemixTokenContent(id) {
-    return await walletConnection.account().viewFunction(nearconfig.contractName, 'view_remix_content', { token_id: id });
-}
-
 function base64ToByteArray(base64encoded) {
     return ((str) => new Uint8Array(str.length).map((v, n) => str.charCodeAt(n)))(atob(base64encoded));
 }
 
-async function loadMusic(tokenId, remimxTokenId, sampleRate) {
-    wasm_bytes = pako.ungzip(base64ToByteArray((await getTokenContent(tokenId + '')).replaceAll(/\"/g, '')));
+async function loadMusic(tokenId, remimxTokenId) {
+    transactionstatus.innerHTML = 'authorizing content download';
+    const listenRequestPassword = await createListenRequest(tokenId, remimxTokenId);
+    transactionstatus.innerHTML = 'getting instrument NFT'
+    wasm_bytes = pako.ungzip(base64ToByteArray((await getTokenContent(tokenId, listenRequestPassword)).replaceAll(/\"/g, '')));
     eventlist = {};
     visualizationObjects = [];
 
-    const mixtokendata = await getRemixTokenContent(remimxTokenId + '');
+    transactionstatus.innerHTML = 'getting sequence NFT';
+    const mixtokendata = await getRemixTokenContent(remimxTokenId, listenRequestPassword);
     let musicdata = pako.ungzip(base64ToByteArray(mixtokendata.split(';')[3]));
+    transactionstatus.innerHTML = '';
+
     const numparts = musicdata[0];
 
     let n = 1;
@@ -259,11 +283,11 @@ async function togglePlay() {
     audioWorkletNode.port.postMessage({ toggleSongPlay: playing });
 }
 
-window.togglePlay = () => {
-    togglePlayButton.innerHTML = playing ? '&#9654;': '&#9725;';
-    togglePlay();
-    
-    if (playing) {        
+window.togglePlay = async () => {
+    togglePlayButton.innerHTML = playing ? '&#9654;' : '&#9725;';
+    await togglePlay();
+
+    if (playing) {
         infopanel.classList.remove('fadeout');
         infopanel.classList.add('fadein');
     } else {
