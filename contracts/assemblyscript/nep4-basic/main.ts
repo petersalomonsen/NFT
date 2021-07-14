@@ -273,18 +273,17 @@ export function view_remix_content(token_id: TokenId): string {
   return remixTokens.getSome(token_id)
 }
 
-function spend_listening_credit(listener: string, token_id: TokenId, listenRequestPasswordHash: string, amount: i32 = 1): void {
+function spend_listening_credit(listener: string, token_id: TokenId, listenRequestPasswordHash: string): void {
   const owner = tokenToOwner.getSome(token_id)
   if (owner != listener) {
     assert(listenCredit.contains(listener), ERROR_NO_LISTENING_CREDIT)
     const currentListenCredit = I32.parseInt(listenCredit.get(listener)!)
-    if (amount > 0) {
-      assert(currentListenCredit >= amount, ERROR_NO_LISTENING_CREDIT)
-      listenCredit.set(listener, (currentListenCredit - 1).toString())
-    }
 
-    // always give the owner some credit back
-    const ownerListenCredit: i32 = listenCredit.contains(listener) ? I32.parseInt(listenCredit.get(listener)!) : 0
+    assert(currentListenCredit > 0, ERROR_NO_LISTENING_CREDIT)
+    listenCredit.set(listener, (currentListenCredit - 1).toString())
+
+    // credit the NFT owner
+    const ownerListenCredit: i32 = listenCredit.contains(owner) ? I32.parseInt(listenCredit.get(owner)!) : 0
     listenCredit.set(owner, (ownerListenCredit + 1).toString())
   }
   const listeningKey = 'l:' + listener + ':' + token_id.toString()
@@ -295,8 +294,7 @@ export function request_listening(token_id: TokenId, listenRequestPasswordHash: 
   const listener = context.predecessor
   spend_listening_credit(listener, token_id, listenRequestPasswordHash)
   if (remix_token_id > 0) {
-    // free listening for the remix token
-    spend_listening_credit(listener, remix_token_id, listenRequestPasswordHash, 0)
+    spend_listening_credit(listener, remix_token_id, listenRequestPasswordHash)
   }
 }
 

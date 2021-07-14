@@ -346,7 +346,7 @@ describe('nonSpec interface', () => {
     expect(nonSpec.view_listening_credit(bob)).toBe(0)
     expect(nonSpec.view_listening_credit(alice)).toBe(1)
   })
-  it('one listening credit should include a remix token', () => {
+  it('should request listening for base and remix token in the same call', () => {
     VMContext.setAttached_deposit(mintprice);
     VMContext.setPredecessor_account_id(alice)
     const tokenId = nonSpec.mint_to_base64(alice, content, true)
@@ -366,11 +366,11 @@ describe('nonSpec interface', () => {
     const remixNFTid = parseInt(mixes[0].split(';')[1].split(':')[1]) as u64
 
     VMContext.setPredecessor_account_id(bob)
-    expect(nonSpec.view_listening_credit(alice)).toBe(0)
     expect(nonSpec.view_listening_credit(bob)).toBe(0)
-    VMContext.setAttached_deposit(nonSpec.LISTEN_PRICE)
+
+    VMContext.setAttached_deposit(nonSpec.LISTEN_PRICE * u128.from(2))
     nonSpec.buy_listening_credit()
-    expect(nonSpec.view_listening_credit(bob)).toBe(1)
+    expect(nonSpec.view_listening_credit(bob)).toBe(2)
     const listenRequestPassword = 'abcd1234'
     currentListenRequestPassword = listenRequestPassword
 
@@ -381,17 +381,20 @@ describe('nonSpec interface', () => {
 
     const hashstate = sha256HashInit()
     sha256HashUpdate(hashstate, Uint8Array.wrap(String.UTF8.encode(listenRequestPassword)))
+
+    expect(nonSpec.view_listening_credit(alice)).toBe(0)
+    expect(nonSpec.view_listening_credit(carol)).toBe(0)
     nonSpec.request_listening(tokenId, base64.encode(sha256HashFinal(hashstate)), remixNFTid)
+    expect(nonSpec.view_listening_credit(bob)).toBe(0)
+    expect(nonSpec.view_listening_credit(carol)).toBe(1)
+    expect(nonSpec.view_listening_credit(alice)).toBe(1)
+
     expect(() => {
       nonSpec.get_remix_token_content(currentTokenId, bob, currentListenRequestPassword)
     }).not.toThrow()
 
     expect(base64.encode(nonSpec.get_token_content_base64(tokenId, bob, listenRequestPassword))).toStrictEqual(content)
     expect(nonSpec.get_remix_token_content(remixNFTid, bob, listenRequestPassword)).toBe(`${tokenId};${mix}`)
-
-    expect(nonSpec.view_listening_credit(bob)).toBe(0)
-    expect(nonSpec.view_listening_credit(alice)).toBe(1)
-    expect(nonSpec.view_listening_credit(carol)).toBe(1)
   })
   it('listening request should only last 5 minutes', () => {
     VMContext.setAttached_deposit(mintprice);
