@@ -2,8 +2,8 @@ import * as THREE from 'https://cdn.skypack.dev/three@0.130.1';
 
 let camera, scene, renderer;
 let geometry, material;
-let positionPlane;
-let visualizationTime = 0;
+let cameratime = 0;
+
 init();
 
 function init() {
@@ -11,16 +11,9 @@ function init() {
     camera.position.z = 0;
     scene = new THREE.Scene();
 
-    const geometry = new THREE.PlaneGeometry( 1.0, 1.0 );
-    const material = new THREE.MeshBasicMaterial( {color: 0x010022, transparent: true, opacity: 0.7, side: THREE.DoubleSide} );
-    positionPlane = new THREE.Mesh( geometry, material );
-    scene.add(positionPlane);
-    
-    camera.lookAt( positionPlane.position );
-
-    renderer = new THREE.WebGLRenderer( { antialias: true } );
+    renderer = new THREE.WebGLRenderer();
     renderer.setSize( window.innerWidth, window.innerHeight );
-    renderer.setAnimationLoop( animation );
+
     renderer.domElement.style.position = 'fixed';
     renderer.domElement.style.top = 0;
     renderer.domElement.style.bottom = 0;
@@ -43,13 +36,9 @@ export function insertVisualizationObjects(visualizationObjects) {
 }
 
 export function setVisualizationTime(time) {
-    visualizationTime = time;
-    positionPlane.position.z = -time;
-}
-
-function animation(time) {
-    camera.position.x = Math.cos(time / 2000) * 0.1;
-    camera.position.y = Math.sin(time / 4000) * 0.1;
-    camera.position.z = -visualizationTime + 0.7;
+    camera.position.x = Math.cos(cameratime) * 0.1;
+    camera.position.y = Math.sin(cameratime * 2) * 0.1;
+    cameratime += 0.002;
+    camera.position.z = -time + 0.7;
     renderer.render( scene, camera );
 }
