@@ -293,8 +293,8 @@ async function togglePlay() {
 }
 
 window.togglePlay = async () => {
+    await audioContext.resume();
     togglePlayButton.innerHTML = playing ? '&#9654;' : '&#9725;';
-
 
     if (playing) {
         infopanel.classList.remove('fadeout');
