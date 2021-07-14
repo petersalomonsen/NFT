@@ -11,14 +11,23 @@
                 margin: 0;
                 user-select: none;
             }
-            #timeslider {
+            #timeslider, #timeslidercontainer {
                 width: 100%;
+            }
+            #timeslidercontainer {
+                background-color:rgba(100,100,100,0.3);
+                display: flex;
+                align-content: center;
+                height: 30px;
+                border-radius: 10px;
             }
             #togglePlayButton {
                 font-size: 50px;
-                background-color:rgba(0,0,0,0.2);
-                border: none;
-                border-radius: 10px;
+                background-color:rgba(100,100,100,0.3);
+                border: none;                
+                width: 70px;
+                height: 70px;
+                border-radius: 35px;
                 color: white;
             }
             #controlpanel {
@@ -92,7 +101,9 @@
                 &#9654;
             </button></p>
             <p><span id="currenttimespan"></span></p>
-            <input type="range" id="timeslider"/>
+            <div id="timeslidercontainer">
+                <input type="range" id="timeslider"/>
+            </div>
         </div>
         <script src="https://cdn.jsdelivr.net/gh/nearprotocol/near-api-js/dist/near-api-js.js"></script>
         <script src="https://unpkg.com/pako@2.0.3/dist/pako.min.js"></script>

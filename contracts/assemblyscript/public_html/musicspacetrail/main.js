@@ -240,7 +240,7 @@ async function loadMusic(tokenId, remimxTokenId) {
 let bufferno = 0;
 
 async function initPlay() {
-    await audioContext.audioWorklet.addModule('./audioworkletprocessor.js');
+    await audioContext.audioWorklet.addModule('./audioworkletprocessor.js?1');
     audioWorkletNode = new AudioWorkletNode(audioContext, 'eventlist-and-wasmsynth-audio-worklet-processor', {
         outputChannelCount: [2]
     });

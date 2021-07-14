@@ -16,6 +16,12 @@ class EventListAndWasmSynthAudioWorkletProcessor extends AudioWorkletProcessor {
                         }
                     });
                 this.wasmInstance = (await this.wasmInstancePromise).instance.exports;
+                this.leftbuffer = new Float32Array(this.wasmInstance.memory.buffer,
+                    this.wasmInstance.samplebuffer,
+                    SAMPLE_FRAMES);
+                this.rightbuffer = new Float32Array(this.wasmInstance.memory.buffer,
+                    this.wasmInstance.samplebuffer + (SAMPLE_FRAMES * 4),
+                    SAMPLE_FRAMES);
                 this.eventlist = msg.data.eventlist;
                 this.endBufferNo = msg.data.endBufferNo;
             }
@@ -77,12 +83,8 @@ class EventListAndWasmSynthAudioWorkletProcessor extends AudioWorkletProcessor {
             }
             this.wasmInstance.fillSampleBuffer();
 
-            output[0].set(new Float32Array(this.wasmInstance.memory.buffer,
-                this.wasmInstance.samplebuffer,
-                SAMPLE_FRAMES));
-            output[1].set(new Float32Array(this.wasmInstance.memory.buffer,
-                this.wasmInstance.samplebuffer + (SAMPLE_FRAMES * 4),
-                SAMPLE_FRAMES));
+            output[0].set(this.leftbuffer);
+            output[1].set(this.rightbuffer);
         }
 
         return this.processorActive;
