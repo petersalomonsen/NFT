@@ -60,16 +60,26 @@ export async function byteArrayToBase64(data) {
 }
 
 async function createListenRequest(token_id, remix_token_id) {
-    const account = walletConnection.account();
+    transactionstatus.innerHTML = `authorizing content download ${remix_token_id ? '(2 credits)' : '(1 credit)'}`;
+    try {
+        const account = walletConnection.account();
 
-    const listenRequestPassword = await byteArrayToBase64(crypto.getRandomValues(new Uint8Array(64)));
-    const listenRequestPasswordHash = await byteArrayToBase64(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(listenRequestPassword)));
-    await account.functionCall(nearconfig.contractName, 'request_listening', {
-        token_id: `${token_id}`,
-        listenRequestPasswordHash: listenRequestPasswordHash,
-        remix_token_id: `${remix_token_id}`
-    });
-    return listenRequestPassword;
+        const listenRequestPassword = await byteArrayToBase64(crypto.getRandomValues(new Uint8Array(64)));
+        const listenRequestPasswordHash = await byteArrayToBase64(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(listenRequestPassword)));
+        await account.functionCall(nearconfig.contractName, 'request_listening', {
+            token_id: `${token_id}`,
+            listenRequestPasswordHash: listenRequestPasswordHash,
+            remix_token_id: `${remix_token_id}`
+        });
+        return listenRequestPassword;
+    } catch (e) {
+        if (e.message.indexOf('No listening credit')>-1) {
+            transactionstatus.innerHTML = 'not enough credits';
+        } else {
+            transactionstatus.innerHTML = e.message;
+        }
+        throw(e);
+    }
 }
 
 async function getTokenContent(token_id, listenRequestPassword) {
@@ -103,7 +113,7 @@ async function viewListeningCredit() {
     const account = walletConnection.account();
     const result = await account.viewFunction(nearconfig.contractName, 'view_listening_credit', { account: account.accountId });
     document.getElementById('creditscount').innerHTML = `${result}`;
-    if (result > 0) {
+    if (result > 1) {
         document.getElementById('controlpanel').style.display = 'block';
     }
 }
@@ -113,7 +123,6 @@ function base64ToByteArray(base64encoded) {
 }
 
 async function loadMusic(tokenId, remimxTokenId) {
-    transactionstatus.innerHTML = 'authorizing content download';
     const listenRequestPassword = await createListenRequest(tokenId, remimxTokenId);
     transactionstatus.innerHTML = 'getting instrument NFT'
     wasm_bytes = pako.ungzip(base64ToByteArray((await getTokenContent(tokenId, listenRequestPassword)).replaceAll(/\"/g, '')));
