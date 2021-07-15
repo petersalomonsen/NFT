@@ -14,7 +14,7 @@ function init() {
     renderer = new THREE.WebGLRenderer();
     renderer.setSize( window.innerWidth, window.innerHeight );
 
-    renderer.domElement.style.position = 'fixed';
+    renderer.domElement.style.position = 'absolute';
     renderer.domElement.style.top = 0;
     renderer.domElement.style.bottom = 0;
     renderer.domElement.style.margin = 0;
@@ -37,8 +37,8 @@ export function insertVisualizationObjects(visualizationObjects) {
 
 export function setVisualizationTime(time) {
     camera.position.x = Math.cos(cameratime) * 0.1;
-    camera.position.y = Math.sin(cameratime * 2) * 0.1;
-    cameratime += 0.002;
+    camera.position.y = Math.sin(cameratime * 1.5) * 0.08;
+    cameratime += 0.003;
     camera.position.z = -time + 0.7;
     renderer.render( scene, camera );
 }

@@ -1,6 +1,6 @@
 import { insertVisualizationObjects, setVisualizationTime } from './visualizer.js';
 
-/*const nearconfig = {
+const nearconfig = {
     nodeUrl: 'https://rpc.mainnet.near.org',
     walletUrl: 'https://wallet.mainnet.near.org',
     helperUrl: 'https://helper.mainnet.near.org',
@@ -9,8 +9,8 @@ import { insertVisualizationObjects, setVisualizationTime } from './visualizer.j
     deps: {
         keyStore: null
     }
-};*/
-
+};
+/*
 const nearconfig = {
     nodeUrl: 'https://rpc.testnet.near.org',
     walletUrl: 'https://wallet.testnet.near.org',
@@ -20,7 +20,7 @@ const nearconfig = {
     deps: {
         keyStore: null
     }
-};
+};*/
 nearconfig.deps.keyStore = new nearApi.keyStores.BrowserLocalStorageKeyStore();
 
 const timeSlider = document.getElementById('timeslider');
@@ -286,8 +286,8 @@ async function togglePlay() {
     if (!initPromise) {
         initPromise = new Promise(async (resolve, reject) => {
             try {
-                //await loadMusic(7, 10);
-                await loadMusic(34, 43);
+                await loadMusic(7, 10);
+                //await loadMusic(34, 43);
                 viewListeningCredit();
                 insertVisualizationObjects(visualizationObjects);
                 await initPlay();
@@ -327,6 +327,10 @@ window.login = async () => {
     await loadAccountData();
 }
 
+window.logout = async () => {
+    await walletConnection.signOut();
+    location.reload();
+}
 
 (async () => {
     nearconfig.deps.keyStore = new nearApi.keyStores.BrowserLocalStorageKeyStore();
@@ -338,6 +342,7 @@ window.login = async () => {
     if (loggedInUser) {
         document.getElementById('username').innerHTML = loggedInUser;
         document.getElementById('userpanel').style.display = 'block';
+        document.getElementById('logoutbutton').style.visibility = 'visible';
         await viewListeningCredit();
     } else {
         document.getElementById('loginpanel').style.display = 'block';

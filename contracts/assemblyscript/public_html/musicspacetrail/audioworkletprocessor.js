@@ -1,5 +1,3 @@
-const SAMPLE_FRAMES = 128;
-
 class EventListAndWasmSynthAudioWorkletProcessor extends AudioWorkletProcessor {
     constructor() {
         super();
