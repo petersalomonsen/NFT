@@ -20,6 +20,8 @@ self.onmessage = async (msg) => {
 
     const messageChannelPort = msg.data.messageChannelPort;
 
+    let lastProgressReportTime = Date.now();
+
     for (let bufferNo = 0; bufferNo < endBufferNo ; bufferNo++) {
         const events = eventlist[bufferNo];
         if (events) {
@@ -41,5 +43,15 @@ self.onmessage = async (msg) => {
             left: transferLeft.buffer,
             right: transferRight.buffer
         }, [transferLeft.buffer, transferRight.buffer]);        
+
+        if (Date.now() - lastProgressReportTime > 100) {
+            lastProgressReportTime = Date.now();
+            self.postMessage({
+                buffersRendered: bufferNo
+            });
+        }
     }
+    self.postMessage({
+        buffersRendered: endBufferNo
+    });
 };

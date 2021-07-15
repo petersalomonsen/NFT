@@ -230,8 +230,6 @@ async function loadMusic(tokenId, remimxTokenId) {
     timeSlider.max = endBufferNo;
 }
 
-let bufferno = 0;
-
 async function initPlay() {
     await audioContext.audioWorklet.addModule('./audioworkletprocessor.js?6');
     audioWorkletNode = new AudioWorkletNode(audioContext, 'eventlist-and-wasmsynth-audio-worklet-processor', {
@@ -253,7 +251,13 @@ async function initPlay() {
         endBufferNo: endBufferNo,
         messageChannelPort: messageChannel.port1
     }, [messageChannel.port1]);
-
+    renderWorker.onmessage = (msg) => {
+        if (msg.data.buffersRendered) {
+            const buffersRendered = msg.data.buffersRendered;
+            const progress = (buffersRendered / endBufferNo) * 100;
+            document.getElementById('timeslidercontainer').style.background = `linear-gradient(90deg, rgba(60,60,120,0.8)0%,  rgba(60,60,120,0.8) ${progress}%, rgba(0,0,0,0.0) ${progress + 5}%)`;
+        }
+    };
 
 
     const messageLoop = () => {
@@ -270,7 +274,7 @@ async function initPlay() {
     messageLoop();
 
     timeSlider.addEventListener('input', () => {
-        bufferno = audioWorkletNode.port.postMessage({ seek: parseInt(timeSlider.value) });
+        audioWorkletNode.port.postMessage({ seek: parseInt(timeSlider.value) });
     });
 }
 
