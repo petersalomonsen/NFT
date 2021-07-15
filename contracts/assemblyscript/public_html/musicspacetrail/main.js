@@ -24,7 +24,7 @@ const nearconfig = {
 nearconfig.deps.keyStore = new nearApi.keyStores.BrowserLocalStorageKeyStore();
 
 const timeSlider = document.getElementById('timeslider');
-const currentTimeSpan = document.getElementById('currenttimespan');
+
 const infopanel = document.getElementById('info');
 const transactionstatus = document.getElementById('transactionstatus');
 
@@ -43,13 +43,6 @@ let playing = false;
 let visualizationObjects;
 
 const audioContext = new AudioContext();
-
-function bufferNoToTimeString(bufferNo, sampleRate) {
-    const time = bufferNo * wasmbuffersize / sampleRate;
-    const minutes = Math.floor(time / 60);
-    const seconds = Math.floor(time - minutes * 60);
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-}
 
 export async function byteArrayToBase64(data) {
     return await new Promise(r => {
@@ -267,7 +260,6 @@ async function initPlay() {
         audioWorkletNode.port.postMessage({ getCurrentBufferNo: true });
         audioWorkletNode.port.onmessage = (msg) => {
             if (msg.data.currentBufferNo !== undefined) {
-                currentTimeSpan.innerHTML = bufferNoToTimeString(msg.data.currentBufferNo, audioContext.sampleRate);
                 timeSlider.value = msg.data.currentBufferNo;
                 setVisualizationTime(endOfSong * msg.data.currentBufferNo / endBufferNo);
             }
