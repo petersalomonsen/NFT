@@ -231,8 +231,8 @@ async function loadMusic(tokenId, remimxTokenId) {
 }
 
 async function initPlay() {
-    await audioContext.audioWorklet.addModule('./audioworkletprocessor.js?6');
-    audioWorkletNode = new AudioWorkletNode(audioContext, 'eventlist-and-wasmsynth-audio-worklet-processor', {
+    await audioContext.audioWorklet.addModule('./audioworkletprocessor.js?8');
+    audioWorkletNode = new AudioWorkletNode(audioContext, 'render-worker-audio-worklet-processor', {
         outputChannelCount: [2]
     });
     const messageChannel = new MessageChannel();

@@ -1,4 +1,4 @@
-class EventListAndWasmSynthAudioWorkletProcessor extends AudioWorkletProcessor {
+class RenderWorkerAudioWorkletProcessor extends AudioWorkletProcessor {
     constructor() {
         super();
         this.processorActive = true;
@@ -57,4 +57,4 @@ class EventListAndWasmSynthAudioWorkletProcessor extends AudioWorkletProcessor {
     }
 }
 
-registerProcessor('eventlist-and-wasmsynth-audio-worklet-processor', EventListAndWasmSynthAudioWorkletProcessor);
+registerProcessor('render-worker-audio-worklet-processor', RenderWorkerAudioWorkletProcessor);
