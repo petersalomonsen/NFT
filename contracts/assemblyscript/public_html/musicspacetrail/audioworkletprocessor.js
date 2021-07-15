@@ -6,24 +6,16 @@ class EventListAndWasmSynthAudioWorkletProcessor extends AudioWorkletProcessor {
         this.processorActive = true;
         this.playSong = true;
         this.bufferNo = 0;
-
         this.port.onmessage = async (msg) => {
-            if (msg.data.wasm) {
-                this.wasmInstancePromise = WebAssembly.instantiate(msg.data.wasm,
-                    {
-                        environment: {
-                            SAMPLERATE: sampleRate || AudioWorkletGlobalScope.sampleRate
-                        }
-                    });
-                this.wasmInstance = (await this.wasmInstancePromise).instance.exports;
-                this.leftbuffer = new Float32Array(this.wasmInstance.memory.buffer,
-                    this.wasmInstance.samplebuffer,
-                    SAMPLE_FRAMES);
-                this.rightbuffer = new Float32Array(this.wasmInstance.memory.buffer,
-                    this.wasmInstance.samplebuffer + (SAMPLE_FRAMES * 4),
-                    SAMPLE_FRAMES);
-                this.eventlist = msg.data.eventlist;
+            if (msg.data.messageChannelPort) {                
                 this.endBufferNo = msg.data.endBufferNo;
+                this.buffers = Array(this.endBufferNo);
+                msg.data.messageChannelPort.onmessage = (msg) => {
+                    this.buffers[msg.data.bufferNo] = {
+                        left: new Float32Array(msg.data.left),
+                        right: new Float32Array(msg.data.right)
+                    };
+                };
             }
 
             if (msg.data.getCurrentBufferNo) {
@@ -34,7 +26,6 @@ class EventListAndWasmSynthAudioWorkletProcessor extends AudioWorkletProcessor {
 
             if (msg.data.toggleSongPlay !== undefined) {
                 if (msg.data.toggleSongPlay === false) {
-                    this.allNotesOff();
                     this.playSong = false;
                 } else {
                     this.playSong = true;
@@ -42,7 +33,6 @@ class EventListAndWasmSynthAudioWorkletProcessor extends AudioWorkletProcessor {
             }
 
             if (msg.data.seek !== undefined) {
-                this.allNotesOff();
                 this.bufferNo = msg.data.seek;
             }
 
@@ -53,38 +43,16 @@ class EventListAndWasmSynthAudioWorkletProcessor extends AudioWorkletProcessor {
         };
     }
 
-    allNotesOff() {
-        if (this.wasmInstance) {
-            this.wasmInstance.allNotesOff();
-            for (let ch = 0; ch < 16; ch++) {
-                this.wasmInstance.shortmessage(
-                    0xb0 + ch, 64, 0  // reset sustain pedal
-                );
-            }
-        }
-    }
-
     process(inputs, outputs, parameters) {
         const output = outputs[0];
 
-        if (this.wasmInstance) {
-            if (this.playSong) {
-                const events = this.eventlist[this.bufferNo];
-                if (events) {
-                    for (let n = 0; n < events.length; n++) {
-                        const evt = events[n];
-                        this.wasmInstance.shortmessage(evt[0], evt[1], evt[2])
-                    }
-                }
-                this.bufferNo++;
-                if (this.bufferNo === this.endBufferNo) {
-                    this.bufferNo = 0;
-                }
+        if (this.playSong && this.buffers && this.buffers[this.bufferNo]) {
+            output[0].set(this.buffers[this.bufferNo].left);
+            output[1].set(this.buffers[this.bufferNo].right);
+            this.bufferNo++;
+            if (this.bufferNo === this.endBufferNo) {
+                this.bufferNo = 0;
             }
-            this.wasmInstance.fillSampleBuffer();
-
-            output[0].set(this.leftbuffer);
-            output[1].set(this.rightbuffer);
         }
 
         return this.processorActive;

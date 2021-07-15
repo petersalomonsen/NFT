@@ -73,12 +73,12 @@ async function createListenRequest(token_id, remix_token_id) {
         });
         return listenRequestPassword;
     } catch (e) {
-        if (e.message.indexOf('No listening credit')>-1) {
+        if (e.message.indexOf('No listening credit') > -1) {
             transactionstatus.innerHTML = 'not enough credits';
         } else {
             transactionstatus.innerHTML = e.message;
         }
-        throw(e);
+        throw (e);
     }
 }
 
@@ -240,17 +240,28 @@ async function loadMusic(tokenId, remimxTokenId) {
 let bufferno = 0;
 
 async function initPlay() {
-    await audioContext.audioWorklet.addModule('./audioworkletprocessor.js?1');
+    await audioContext.audioWorklet.addModule('./audioworkletprocessor.js?6');
     audioWorkletNode = new AudioWorkletNode(audioContext, 'eventlist-and-wasmsynth-audio-worklet-processor', {
         outputChannelCount: [2]
     });
+    const messageChannel = new MessageChannel();
     audioWorkletNode.port.start();
     audioWorkletNode.port.postMessage({
-        wasm: wasm_bytes,
-        eventlist: eventlist,
+        messageChannelPort: messageChannel.port2,
         endBufferNo: endBufferNo
-    });
+    }, [messageChannel.port2]);
     audioWorkletNode.connect(audioContext.destination);
+
+    const renderWorker = new Worker('renderworker.js');
+    renderWorker.postMessage({
+        wasm: wasm_bytes,
+        sampleRate: audioContext.sampleRate,
+        eventlist: eventlist,
+        endBufferNo: endBufferNo,
+        messageChannelPort: messageChannel.port1
+    }, [messageChannel.port1]);
+
+
 
     const messageLoop = () => {
         audioWorkletNode.port.postMessage({ getCurrentBufferNo: true });
