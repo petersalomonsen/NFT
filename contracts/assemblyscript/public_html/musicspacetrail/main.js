@@ -1,4 +1,6 @@
 import { insertVisualizationObjects, setVisualizationTime } from './visualizer.js';
+import { getAudioWorkletProcessorUrl } from './audioworkletprocessor.js';
+import { getRenderWorkerUrl } from './renderworker.js';
 
 const nearconfig = {
     nodeUrl: 'https://rpc.mainnet.near.org',
@@ -232,7 +234,7 @@ async function loadMusic(tokenId, remimxTokenId) {
 }
 
 async function initPlay() {
-    await audioContext.audioWorklet.addModule('./audioworkletprocessor.js?8');
+    await audioContext.audioWorklet.addModule(getAudioWorkletProcessorUrl(), {credentials: 'omit'});
     audioWorkletNode = new AudioWorkletNode(audioContext, 'render-worker-audio-worklet-processor', {
         outputChannelCount: [2]
     });
@@ -244,7 +246,7 @@ async function initPlay() {
     }, [messageChannel.port2]);
     audioWorkletNode.connect(audioContext.destination);
 
-    renderWorker = new Worker('renderworker.js');
+    renderWorker = new Worker(getRenderWorkerUrl(), {credentials: 'omit'});
     renderWorker.postMessage({
         wasm: wasm_bytes,
         sampleRate: audioContext.sampleRate,
