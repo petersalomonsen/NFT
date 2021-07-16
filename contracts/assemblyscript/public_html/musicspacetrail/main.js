@@ -41,6 +41,7 @@ let initPromise;
 let audioWorkletNode;
 let playing = false;
 let visualizationObjects;
+let renderWorker;
 
 const audioContext = new AudioContext();
 
@@ -243,7 +244,7 @@ async function initPlay() {
     }, [messageChannel.port2]);
     audioWorkletNode.connect(audioContext.destination);
 
-    const renderWorker = new Worker('renderworker.js');
+    renderWorker = new Worker('renderworker.js');
     renderWorker.postMessage({
         wasm: wasm_bytes,
         sampleRate: audioContext.sampleRate,
@@ -282,6 +283,7 @@ async function togglePlay() {
     if (!initPromise) {
         initPromise = new Promise(async (resolve, reject) => {
             try {
+                await audioContext.resume();
                 await loadMusic(7, 10);
                 //await loadMusic(34, 43);
                 viewListeningCredit();
@@ -300,7 +302,6 @@ async function togglePlay() {
 }
 
 window.togglePlay = async () => {
-    await audioContext.resume();
     togglePlayButton.innerHTML = playing ? '&#9654;' : '&#9725;';
 
     if (playing) {
