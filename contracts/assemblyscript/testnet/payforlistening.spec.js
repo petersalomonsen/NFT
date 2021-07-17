@@ -182,7 +182,7 @@ describe('pay for listening', () => {
     expect(await account1.viewFunction(contractName, 'view_listening_credit', { account: account1.accountId })).toBe(1);
     expect(await guestAccount.viewFunction(contractName, 'view_listening_credit', { account: guestAccount.accountId })).toBe(0);
 
-    await account1.functionCall(contractName, 'transfer_listening_credit', {receiver_account: guestAccount.accountId, amount: 1}, null, '10000000000000000000000');
+    await account1.functionCall(contractName, 'transfer_listening_credit', {receiver_account: guestAccount.accountId, amount: 1});
     expect(await account1.viewFunction(contractName, 'view_listening_credit', { account: account1.accountId })).toBe(0);
     expect(await guestAccount.viewFunction(contractName, 'view_listening_credit', { account: guestAccount.accountId })).toBe(1);
 

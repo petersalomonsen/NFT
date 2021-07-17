@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        
+    </style>
+</head>
+
+<body>
+    <button onclick="transferCredits()">Transfer</button>
+
+    <script src="https://cdn.jsdelivr.net/gh/nearprotocol/near-api-js/dist/near-api-js.js"></script>
+    <script type="module">
+        const nearconfig = {
+            nodeUrl: 'https://rpc.mainnet.near.org',
+            walletUrl: 'https://wallet.mainnet.near.org',
+            helperUrl: 'https://helper.mainnet.near.org',
+            networkId: 'mainnet',
+            contractName: 'psalomo.near',
+            deps: {
+                keyStore: null
+            }
+        };        
+
+        window.transferCredits = async () => {
+            await walletConnection.account().functionCall(nearconfig.contractName, 'transfer_listening_credit', {receiver_account: '0b2882179858ee0a8bb89b0bd4280348891bc2cf2ca16e036d14227781a5ee4e', amount: 10});
+        }
+        (async () => {
+            nearconfig.deps.keyStore = new nearApi.keyStores.BrowserLocalStorageKeyStore();
+            window.near = await nearApi.connect(nearconfig);
+            window.walletConnection = new nearApi.WalletConnection(near);
+            
+        })();
+    </script>
+</body>
+
+</html>

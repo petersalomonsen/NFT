@@ -337,7 +337,16 @@ window.logout = async () => {
     window.walletConnection = new nearApi.WalletConnection(near);
 
     // Load in account data
-    const loggedInUser = walletConnection.getAccountId();
+    let loggedInUser = walletConnection.getAccountId();
+
+    if (!loggedInUser && location.search.indexOf('accesskey=') > -1) {
+        const accessobj = JSON.parse(Buffer.from(location.search.split('accesskey=')[1],'base64').toString());
+        const accountid = accessobj.accountid;
+        const keypair = nearApi.utils.KeyPairEd25519.fromString(accessobj.keypair);
+        walletConnection._keyStore.setKey(nearconfig.networkId, accountid, keypair);        
+        walletConnection._connectedAccount = await near.account(accountid);
+        loggedInUser = accountid;
+    }
     if (loggedInUser) {
         document.getElementById('username').innerHTML = loggedInUser;
         document.getElementById('userpanel').style.display = 'block';
