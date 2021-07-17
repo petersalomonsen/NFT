@@ -346,6 +346,22 @@ describe('nonSpec interface', () => {
     expect(nonSpec.view_listening_credit(bob)).toBe(0)
     expect(nonSpec.view_listening_credit(alice)).toBe(1)
   })
+  it('should transfer listening credit', () => {
+    VMContext.setAttached_deposit(mintprice);
+    expect(nonSpec.view_listening_credit(alice)).toBe(0)
+    expect(nonSpec.view_listening_credit(bob)).toBe(0)
+    VMContext.setAttached_deposit(nonSpec.LISTEN_PRICE * u128.from(10))
+    VMContext.setPredecessor_account_id(alice)
+    nonSpec.buy_listening_credit()
+    expect(nonSpec.view_listening_credit(alice)).toBe(10)
+    nonSpec.transfer_listening_credit(bob, 5)
+    expect(nonSpec.view_listening_credit(bob)).toBe(5)
+    expect(nonSpec.view_listening_credit(alice)).toBe(5)
+    expect(() => {
+      VMContext.setPredecessor_account_id(alice)
+      nonSpec.transfer_listening_credit(bob, 6)
+    }).toThrow(nonSpec.ERROR_LISTENING_CREDIT_NOT_ENOUGH)
+  })
   it('should request listening for base and remix token in the same call', () => {
     VMContext.setAttached_deposit(mintprice);
     VMContext.setPredecessor_account_id(alice)

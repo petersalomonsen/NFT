@@ -144,4 +144,60 @@ describe('pay for listening', () => {
     expect(await account1.viewFunction(contractName, 'view_listening_credit', { account: account1.accountId })).toBe(1);
     expect(await account3.viewFunction(contractName, 'view_listening_credit', { account: account3.accountId })).toBe(1);
   });
+  it('should transfer credits to implicit account and spend', async () => {
+    const account1kp = nearAPI.utils.KeyPairEd25519.fromRandom();
+    const signer1AccountId = Buffer.from(account1kp.publicKey.data).toString('hex');
+
+    const guestKeyPair = nearAPI.utils.KeyPairEd25519.fromRandom();
+    const guestAccountId = Buffer.from(guestKeyPair.publicKey.data).toString('hex');
+    
+    keyStore2.setKey('default', signer1AccountId, account1kp);
+    keyStore2.setKey('default', guestAccountId, guestKeyPair);
+
+    console.log(contractName, signer1AccountId, guestAccountId);
+
+    // Initializing connection to the NEAR node.
+    const near = await nearAPI.connect({
+      deps: {
+        keyStore
+      },
+      nodeUrl: "https://rpc.testnet.near.org",
+      networkId: "default"
+    });
+
+    const devAccount = await near.account(contractName);
+    await devAccount.sendMoney(signer1AccountId, new BN('100000000000000000000000', 10));
+    await devAccount.sendMoney(guestAccountId, new BN('10000000000000000000000', 10));
+
+    const account1 = await near.account(signer1AccountId);  
+    const guestAccount = await near.account(guestAccountId);
+    const guestFunctionAccessKeyPair = nearAPI.utils.KeyPairEd25519.fromRandom();
+    await guestAccount.addKey(guestFunctionAccessKeyPair.publicKey, contractName, ['request_listening'], '10000000000000000000000');
+    await guestAccount.deleteKey(guestKeyPair.publicKey);
+
+    keyStore2.setKey('default', guestAccountId, guestFunctionAccessKeyPair);
+
+    await account1.functionCall(contractName, 'buy_listening_credit', {}, null, '10000000000000000000000');
+
+    expect(await account1.viewFunction(contractName, 'view_listening_credit', { account: account1.accountId })).toBe(1);
+    expect(await guestAccount.viewFunction(contractName, 'view_listening_credit', { account: guestAccount.accountId })).toBe(0);
+
+    await account1.functionCall(contractName, 'transfer_listening_credit', {receiver_account: guestAccount.accountId, amount: 1}, null, '10000000000000000000000');
+    expect(await account1.viewFunction(contractName, 'view_listening_credit', { account: account1.accountId })).toBe(0);
+    expect(await guestAccount.viewFunction(contractName, 'view_listening_credit', { account: guestAccount.accountId })).toBe(1);
+
+    const contentbase64 = Buffer.from('test').toString('base64');
+    let result = await account1.functionCall(contractName, 'mint_to_base64', {
+      owner_id: signer1AccountId, supportmixing: true,
+      contentbase64: contentbase64
+    }, null, '800000000000000000000');
+    const token_id = JSON.parse(Buffer.from(result.status.SuccessValue, 'base64').toString('utf-8'));
+
+    const listenRequestPassword = crypto.randomBytes(64).toString('base64');
+    const listenRequestPasswordHash = crypto.createHash('sha256').update(listenRequestPassword).digest('base64');
+    await guestAccount.functionCall(contractName, 'request_listening', { token_id: '' + token_id, listenRequestPasswordHash: listenRequestPasswordHash});
+    result = await guestAccount.viewFunction(contractName, 'get_token_content_base64', { token_id: token_id, caller: guestAccountId, listenRequestPassword: listenRequestPassword });
+    expect(result).toBe(contentbase64);
+    expect(await guestAccount.viewFunction(contractName, 'view_listening_credit', { account: guestAccount.accountId })).toBe(0);
+  });
 });

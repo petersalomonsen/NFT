@@ -59,6 +59,7 @@ export const ERROR_LISTENING_NOT_AVAILABLE = 'Listening is not available'
 export const ERROR_LISTENING_NOT_AUTHORIZED = 'Listening is not authorized'
 export const ERROR_LISTENING_REQUIRES_PAYMENT = 'Listening requires payment, call request_listening first'
 export const ERROR_LISTENING_EXPIRED = 'Listening request expired, please create a new'
+export const ERROR_LISTENING_CREDIT_NOT_ENOUGH = 'Not enough listening credit'
 export const ERROR_MIX_TOO_LARGE = 'Mix too large, max size is ' + MAX_MIX_BYTES.toString()
 export const ERROR_TOKEN_DOES_NOT_SUPPORT_MIXING = 'Token does not support mixing'
 export const ERROR_NO_LISTENING_CREDIT = 'No listening credit'
@@ -310,6 +311,16 @@ export function buy_listening_credit(): void {
   const currentListenCredit: u128 = listenCredit.contains(predecessor) ? u128.fromString(listenCredit.get(predecessor)!) : u128.Zero
   listenCredit.set(predecessor, (currentListenCredit +
     (context.attachedDeposit / LISTEN_PRICE)).toString())
+}
+
+export function transfer_listening_credit(receiver_account: string, amount: i32): void {
+    const predecessor = context.predecessor
+    const senderCurrentListenCredit: i32 = listenCredit.contains(predecessor) ? I32.parseInt(listenCredit.get(predecessor)!) : 0
+    assert(senderCurrentListenCredit >= amount, ERROR_LISTENING_CREDIT_NOT_ENOUGH)
+    const receiverCurrentListenCredit: i32 = listenCredit.contains(receiver_account) ? I32.parseInt(listenCredit.get(receiver_account)!) : 0
+
+    listenCredit.set(predecessor, (senderCurrentListenCredit - amount).toString())
+    listenCredit.set(receiver_account, (receiverCurrentListenCredit + amount).toString())
 }
 
 export function view_token_content_base64(token_id: TokenId): String {

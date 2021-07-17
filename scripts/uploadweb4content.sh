@@ -1,3 +1,4 @@
+#!/bin/bash
 contract=$1
 web4path=$2
 file=$3
