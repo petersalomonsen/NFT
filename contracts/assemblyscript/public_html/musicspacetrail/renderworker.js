@@ -8,14 +8,16 @@ function renderWorker() {
                     SAMPLERATE: msg.data.sampleRate
                 }
             })).instance.exports;
-        
+
         const leftbuffer = new Float32Array(wasmInstance.memory.buffer,
             wasmInstance.samplebuffer,
             SAMPLE_FRAMES);
         const rightbuffer = new Float32Array(wasmInstance.memory.buffer,
             wasmInstance.samplebuffer + (SAMPLE_FRAMES * 4),
             SAMPLE_FRAMES);
-
+        const transferLeft = new Float32Array(leftbuffer.length);
+        const transferRight = new Float32Array(rightbuffer.length);
+            
         const eventlist = msg.data.eventlist;
         const endBufferNo = msg.data.endBufferNo;
 
@@ -23,7 +25,7 @@ function renderWorker() {
 
         let lastProgressReportTime = Date.now();
 
-        for (let bufferNo = 0; bufferNo < endBufferNo ; bufferNo++) {
+        for (let bufferNo = 0; bufferNo < endBufferNo; bufferNo++) {
             const events = eventlist[bufferNo];
             if (events) {
                 for (let n = 0; n < events.length; n++) {
@@ -34,8 +36,6 @@ function renderWorker() {
 
             wasmInstance.fillSampleBuffer();
 
-            const transferLeft = new Float32Array(leftbuffer.length);
-            const transferRight = new Float32Array(rightbuffer.length);
             transferLeft.set(leftbuffer);
             transferRight.set(rightbuffer);
 
@@ -43,7 +43,7 @@ function renderWorker() {
                 bufferNo: bufferNo,
                 left: transferLeft.buffer,
                 right: transferRight.buffer
-            }, [transferLeft.buffer, transferRight.buffer]);        
+            });
 
             if (Date.now() - lastProgressReportTime > 100) {
                 lastProgressReportTime = Date.now();
