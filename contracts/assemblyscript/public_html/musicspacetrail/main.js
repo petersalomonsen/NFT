@@ -45,7 +45,7 @@ let playing = false;
 let visualizationObjects;
 let renderWorker;
 
-const audioContext = new AudioContext();
+const audioContext = new AudioContext({latencyHint: 'playback', sampleRate: 44100});
 
 export async function byteArrayToBase64(data) {
     return await new Promise(r => {
